@@ -1,6 +1,6 @@
-# <p align="center"><img src="logo.png" alt="Vellum Logo" width="300"></p>
+<p align="center"><img src="logo.png" alt="Vellum Logo" width="300"></p>
 
-Vellum is a modern Android reader designed for comic book archives (CBZ), EPUBs, and PDFs. It focuses on a clean aesthetic, fluid navigation, and seamless system integration.
+**Vellum is a modern Android reader designed for comic book archives (CBZ), EPUBs, and PDFs. It focuses on a clean aesthetic, fluid navigation, and seamless system integration.**
 
 ## Features
 
