@@ -91,7 +91,9 @@ class ReaderViewModel @Inject constructor(
                     if (pages.isEmpty()) {
                         _uiState.value = ReaderUiState.Error("No readable pages found")
                     } else {
-                        val initialPage = (book.progress * (pages.size - 1)).toInt().coerceIn(0, pages.size - 1)
+                        val initialPage = if (pages.isNotEmpty()) {
+                            (book.progress * (pages.size - 1)).toInt().coerceIn(0, pages.size - 1)
+                        } else 0
                         _uiState.value = ReaderUiState.Success(book, pages, initialPage, accentColor)
                         startPrefetching(book.uriString ?: book.filePath, pages, initialPage)
                     }
@@ -103,7 +105,9 @@ class ReaderViewModel @Inject constructor(
                     if (pages.isEmpty()) {
                         _uiState.value = ReaderUiState.Error("PDF has no pages")
                     } else {
-                        val initialPage = (book.progress * (pages.size - 1)).toInt().coerceIn(0, pages.size - 1)
+                        val initialPage = if (pages.isNotEmpty()) {
+                            (book.progress * (pages.size - 1)).toInt().coerceIn(0, pages.size - 1)
+                        } else 0
                         _uiState.value = ReaderUiState.Success(book, pages, initialPage, accentColor)
                     }
                 }
@@ -119,7 +123,9 @@ class ReaderViewModel @Inject constructor(
                     if (pages.isEmpty()) {
                         _uiState.value = ReaderUiState.Error("Failed to load EPUB content")
                     } else {
-                        val initialPage = (book.progress * (pages.size - 1)).toInt().coerceIn(0, pages.size - 1)
+                        val initialPage = if (pages.isNotEmpty()) {
+                            (book.progress * (pages.size - 1)).toInt().coerceIn(0, pages.size - 1)
+                        } else 0
                         _uiState.value = ReaderUiState.Success(book, pages, initialPage, accentColor)
                     }
                 }

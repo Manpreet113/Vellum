@@ -57,12 +57,17 @@ class PdfFetcher(
             }
 
             renderer.openPage(request.pageIndex).use { page ->
-                // Render at high quality (e.g., 2x or screen density)
+                // Render at high quality (e.g., 2.0x)
+                val scale = 2.0
                 val bitmap = Bitmap.createBitmap(
-                    (page.width * 1.5).toInt(),
-                    (page.height * 1.5).toInt(),
+                    (page.width * scale).toInt(),
+                    (page.height * scale).toInt(),
                     Bitmap.Config.ARGB_8888
                 )
+                // PDFs often have transparent backgrounds, fill with white for correct contrast/colors
+                val canvas = android.graphics.Canvas(bitmap)
+                canvas.drawColor(android.graphics.Color.WHITE)
+                
                 page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                 
                 val stream = ByteArrayOutputStream()

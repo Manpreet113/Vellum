@@ -34,8 +34,9 @@ class LibraryViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val bookRepository: BookRepository,
     private val fileScannerRepository: FileScannerRepository,
-    private val settingsManager: SettingsManager,
-    private val tiltSensorManager: TiltSensorManager
+    private val bookParser: com.reader.vellum.util.BookParser,
+    private val settingsManager: com.reader.vellum.util.SettingsManager,
+    private val tiltSensorManager: com.reader.vellum.util.TiltSensorManager
 ) : ViewModel() {
 
     private val _isScanning = MutableStateFlow(false)
@@ -115,6 +116,28 @@ class LibraryViewModel @Inject constructor(
     fun updateBookCount() {
         viewModelScope.launch {
             _bookCount.value = bookRepository.getBookCount()
+        }
+    }
+
+    fun importFile(uri: Uri, onComplete: (String) -> Unit) {
+        viewModelScope.launch {
+            val uriString = uri.toString()
+            val existingBook = bookRepository.getBookByPath(uriString)
+            if (existingBook != null) {
+                onComplete(existingBook.id)
+            } else {
+                val docFile = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, uri)
+                if (docFile != null && docFile.exists()) {
+                    val book = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        bookParser.parseDocumentFile(docFile, "Inbox")
+                    }
+                    if (book != null) {
+                        bookRepository.upsertBook(book)
+                        updateBookCount()
+                        onComplete(book.id)
+                    }
+                }
+            }
         }
     }
 

@@ -15,19 +15,46 @@ import java.util.zip.ZipInputStream
 class BookParser(private val context: Context) {
 
     private val coverDir = File(context.cacheDir, "covers").apply { if (!exists()) mkdirs() }
+    private val booksDir = File(context.filesDir, "imported_books").apply { if (!exists()) mkdirs() }
     private val epubParser = EpubParser(context)
 
     fun parseDocumentFile(document: DocumentFile, collectionName: String?): Book? {
-        val extension = document.name?.substringAfterLast('.', "")?.lowercase() ?: ""
+        val uri = document.uri
+        val isExternal = uri.scheme == "content" && !uri.toString().contains(context.packageName)
+        
+        val finalDoc = if (isExternal) {
+            persistExternalFile(document) ?: return null
+        } else {
+            document
+        }
+
+        val extension = finalDoc.name?.substringAfterLast('.', "")?.lowercase() ?: ""
         return try {
             when (extension) {
-                "cbz", "zip" -> parseCbz(document, collectionName)
-                "pdf" -> parsePdf(document, collectionName)
-                "epub" -> epubParser.parseEpub(document, collectionName)
+                "cbz", "zip" -> parseCbz(finalDoc, collectionName)
+                "pdf" -> parsePdf(finalDoc, collectionName)
+                "epub" -> epubParser.parseEpub(finalDoc, collectionName)
                 else -> null
             }
         } catch (e: Exception) {
-            Log.e("BookParser", "Error parsing ${document.uri}", e)
+            Log.e("BookParser", "Error parsing ${finalDoc.uri}", e)
+            null
+        }
+    }
+
+    private fun persistExternalFile(document: DocumentFile): DocumentFile? {
+        return try {
+            val name = document.name ?: "imported_${System.currentTimeMillis()}"
+            val destFile = File(booksDir, name)
+            
+            context.contentResolver.openInputStream(document.uri)?.use { input ->
+                FileOutputStream(destFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            DocumentFile.fromFile(destFile)
+        } catch (e: Exception) {
+            Log.e("BookParser", "Failed to persist external file", e)
             null
         }
     }
@@ -83,6 +110,9 @@ class BookParser(private val context: Context) {
             if (totalPages > 0) {
                 renderer.openPage(0).use { page ->
                     val bitmap = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
+                    val canvas = android.graphics.Canvas(bitmap)
+                    canvas.drawColor(android.graphics.Color.WHITE)
+                    
                     page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                     
                     val coverFile = File(coverDir, "${coverKey}_cover.jpg")

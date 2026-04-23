@@ -79,6 +79,12 @@ fun LibraryScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? -> uri?.let { viewModel.restoreProgress(it) } }
 
+    val filePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.importFile(it, onBookClick) }
+    }
+
     if (selectedCollection != null) {
         BackHandler { viewModel.onCollectionSelected(null) }
     }
@@ -127,6 +133,16 @@ fun LibraryScreen(
                             }
                             IconButton(onClick = { showSettings = true }) {
                                 Icon(Icons.Default.Settings, "Settings")
+                            }
+                            IconButton(onClick = {
+                                filePicker.launch(arrayOf(
+                                    "application/pdf",
+                                    "application/epub+zip",
+                                    "application/zip",
+                                    "application/x-cbz"
+                                ))
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.NoteAdd, "Open File")
                             }
                             IconButton(onClick = { directoryPicker.launch(null) }) {
                                 Icon(Icons.Default.Add, "Add Folder")

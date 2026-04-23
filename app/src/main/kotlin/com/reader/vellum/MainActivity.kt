@@ -1,12 +1,17 @@
 package com.reader.vellum
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
+import java.net.URLEncoder
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -18,6 +23,7 @@ import com.reader.vellum.ui.theme.VellumTheme
 import com.reader.vellum.util.HardwareEvent
 import com.reader.vellum.util.HardwareEventManager
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.collectLatest
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -25,13 +31,31 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var hardwareEventManager: HardwareEventManager
+    
+    private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        handleIntent(intent)
+        
         setContent {
             VellumTheme {
-                VellumApp()
+                VellumApp(viewModel)
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_VIEW) {
+            intent.data?.let { uri ->
+                viewModel.handleIntentUri(uri)
             }
         }
     }
@@ -52,15 +76,28 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun VellumApp() {
+fun VellumApp(mainViewModel: MainViewModel) {
     val navController = rememberNavController()
+
+    LaunchedEffect(mainViewModel) {
+        mainViewModel.navigateToReader.collectLatest { bookId ->
+            val encodedId = URLEncoder.encode(bookId, "UTF-8")
+            navController.navigate("reader/$encodedId") {
+                // Pop up to library to avoid stacking readers if multiple intents are received
+                popUpTo("library") { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
 
     NavHost(navController = navController, startDestination = "library") {
         composable("library") {
             LibraryScreen(
                 viewModel = hiltViewModel(),
                 onBookClick = { bookId ->
-                    navController.navigate("reader/$bookId")
+                    val encodedId = URLEncoder.encode(bookId, "UTF-8")
+                    navController.navigate("reader/$encodedId")
                 }
             )
         }
@@ -69,6 +106,9 @@ fun VellumApp() {
             arguments = listOf(navArgument("bookId") { type = NavType.StringType })
         ) { backStackEntry ->
             val bookId = backStackEntry.arguments?.getString("bookId") ?: return@composable
+            // Navigation automatically decodes path segments, but double-check if manual decoding is needed.
+            // Actually NavType.StringType doesn't automatically decode if it was encoded for the route.
+            // Wait, compose navigation DOES decode arguments.
             ReaderScreen(
                 id = bookId,
                 viewModel = hiltViewModel(),
