@@ -1,47 +1,51 @@
-<p align="center"><img src="logo.png" alt="Vellum Logo" width="300"></p>
+<p align="center">
+  <img src="metadata/logo.png" alt="Vellum Logo" width="240">
+</p>
 
-**Vellum is a modern Android reader designed for comic book archives (CBZ), EPUBs, and PDFs. It focuses on a clean aesthetic, fluid navigation, and seamless system integration.**
+<p align="center">
+  Vellum is a minimalist reader for Android. It provides a focused environment for Comic Archives (CBZ), EPUBs, and PDFs, utilizing high-contrast design and glassmorphic interfaces.
+</p>
+
+<p align="center">
+  <img src="metadata/screenshots/library.png" width="200">
+  <img src="metadata/screenshots/books.png" width="200">
+  <img src="metadata/screenshots/reader.png" width="200">
+</p>
+
 
 ## Features
 
-- **Format Support**:
-  - **CBZ / ZIP**: Sequential image rendering for comics and manga.
-  - **PDF**: High-quality hardware-accelerated rendering with white-point correction and 2x supersampling for crisp text.
-  - **EPUB**: Responsive chapter-based reading with customizable themes.
-- **Deep System Integration**:
-  - **Universal Intent Support**: Open documents directly from WhatsApp, Telegram, or your favorite File Manager.
-  - **Auto-Persistence**: Files opened from external apps are automatically imported into Vellum's internal storage for persistent library access.
-  - **Smart Scanning**: Scan entire directories to build your collection instantly.
-- **Reading Experience**:
-  - **Adaptive Chroma**: UI elements dynamically adapt their color to match the book's cover art.
-  - **Immersive Mode**: Full-screen reading with transient system bars.
-  - **Manga Mode**: Right-to-Left (RTL) reading support.
-  - **Hardware Controls**: Use volume keys to turn pages.
-  - **Page Caching**: Intelligent pre-fetching for zero-latency page turns.
+#### Reading
+- Support for CBZ, PDF, and EPUB formats.
+- Vertical progress tracking on the right edge of the screen.
+- Support for Right-to-Left reading.
+- Navigation via volume keys or customizable tap zones.
+- Adaptive chromaticity that shifts UI tones based on content.
+
+#### Integration
+- Support for opening archives from external applications.
+- Automatic integration of external files into local archives.
+- Recursive folder scanning for collection building.
+- State management through backup and restore functionality.
 
 ## Tech Stack
 
-- **Language**: Kotlin
-- **UI Framework**: Jetpack Compose
-- **Concurrency**: Kotlin Coroutines & Flow
-- **Dependency Injection**: Hilt
-- **Database**: Room (with Paging 3)
-- **Image Loading**: Coil 3
-- **Build System**: Gradle Kotlin DSL
+- Kotlin and Jetpack Compose.
+- Coroutines and Flow for asynchronous operations.
+- Hilt for dependency injection.
+- Room and Paging 3 for data management.
+- Coil 3 for hardware-accelerated image decoding.
+- Dynamic font integration.
 
 ## Getting Started
 
-1. **Installation**: Install the latest release on your Android device (Android 8.0+).
-2. **First Scan**: Tap the **Add Folder** icon to scan your existing library.
-3. **Quick Open**: Use the **Open File** icon to read a single document without importing it into a collection.
-4. **External Open**: Simply click on a PDF or CBZ in any other app and select **Vellum** to start reading.
+#### Installation
+1. Install the application on a device running Android 8.0 or higher.
+2. Use the plus icon in the bottom dock to scan folders or import files.
+3. Tap the center of the screen during reading to toggle navigation docks.
 
-## Development Setup
-
+#### Development
 1. Clone the repository.
-2. Open in **Android Studio (Ladybug 2024.2.1+)**.
-3. Ensure **JDK 17** is configured.
-4. Build the `app` module.
-
----
-*Vellum - Crafted for a premium reading experience.*
+2. Open in Android Studio (Ladybug 2024.2.1 or higher).
+3. Use JDK 17 for the build environment.
+4. Build using Gradle Kotlin DSL.
