@@ -31,12 +31,13 @@ enum class LibraryTab {
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
-    @param:ApplicationContext private val context: Context,
+    @ApplicationContext private val context: Context,
     private val bookRepository: BookRepository,
     private val fileScannerRepository: FileScannerRepository,
     private val bookParser: com.reader.vellum.util.BookParser,
     private val settingsManager: com.reader.vellum.util.SettingsManager,
-    private val tiltSensorManager: com.reader.vellum.util.TiltSensorManager
+    private val tiltSensorManager: com.reader.vellum.util.TiltSensorManager,
+    private val lanTransferManager: com.reader.vellum.util.LanTransferManager
 ) : ViewModel() {
 
     private val _isScanning = MutableStateFlow(false)
@@ -65,6 +66,18 @@ class LibraryViewModel @Inject constructor(
     val tapToTurn = settingsManager.tapToTurn
     val volumeKeys = settingsManager.volumeKeys
     val adaptiveChroma = settingsManager.adaptiveChroma
+
+    val isLanServerRunning = lanTransferManager.isServerRunning
+    val lanServerAddress = lanTransferManager.serverAddress
+    val lanServerPin = lanTransferManager.serverPin
+
+    fun toggleLanServer() {
+        if (lanTransferManager.isServerRunning.value) {
+            lanTransferManager.stopServer()
+        } else {
+            lanTransferManager.startServer()
+        }
+    }
 
     val continueReadingBooks: Flow<List<Book>> = bookRepository.getContinueReadingBooks()
 
@@ -206,4 +219,9 @@ class LibraryViewModel @Inject constructor(
     fun setVolumeKeys(enabled: Boolean) = viewModelScope.launch { settingsManager.setVolumeKeys(enabled) }
     fun setAdaptiveChroma(enabled: Boolean) = viewModelScope.launch { settingsManager.setAdaptiveChroma(enabled) }
     fun setHideCompleted(enabled: Boolean) = viewModelScope.launch { settingsManager.setHideCompleted(enabled) }
+
+    override fun onCleared() {
+        super.onCleared()
+        lanTransferManager.stopServer()
+    }
 }

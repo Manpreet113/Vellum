@@ -59,6 +59,9 @@ fun LibraryScreen(
     val scanProgress by viewModel.scanProgress.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedCollection by viewModel.selectedCollection.collectAsState()
+    val isLanServerRunning by viewModel.isLanServerRunning.collectAsState()
+    val lanServerAddress by viewModel.lanServerAddress.collectAsState()
+    val lanServerPin by viewModel.lanServerPin.collectAsState()
     
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     var isSearchActive by remember { mutableStateOf(false) }
@@ -219,6 +222,10 @@ fun LibraryScreen(
 
     if (showAddMenu) {
         AddContentDialog(
+            isLanServerRunning = isLanServerRunning,
+            lanServerAddress = lanServerAddress,
+            lanServerPin = lanServerPin,
+            onToggleLan = viewModel::toggleLanServer,
             onImportFile = {
                 showAddMenu = false
                 filePicker.launch(arrayOf(
@@ -533,6 +540,10 @@ fun SearchTopBar(query: String, onQueryChange: (String) -> Unit, onClose: () -> 
 
 @Composable
 fun AddContentDialog(
+    isLanServerRunning: Boolean,
+    lanServerAddress: String?,
+    lanServerPin: String?,
+    onToggleLan: () -> Unit,
     onImportFile: () -> Unit,
     onScanFolder: () -> Unit,
     onBackup: () -> Unit,
@@ -562,43 +573,132 @@ fun AddContentDialog(
                     "INTEGRATION", 
                     style = MaterialTheme.typography.headlineSmall, 
                     fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 8.sp, // Ultra-wide for futuristic feel
+                    letterSpacing = 8.sp, 
                     color = Color.White
                 )
             }
         },
         text = {
             Column(
-                verticalArrangement = Arrangement.spacedBy(32.dp), 
+                verticalArrangement = Arrangement.spacedBy(28.dp), 
                 modifier = Modifier.padding(top = 16.dp)
             ) {
-                // Section 1: Content Sources
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Section 1: Wireless Transfer (New)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "ARCHIVE SOURCES", 
+                        "WIRELESS INTEGRATION", 
                         style = MaterialTheme.typography.labelSmall, 
                         color = ElectricIndigo, 
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 3.sp
                     )
-                    AddOption(
-                        title = "FILE IMPORT",
-                        subtitle = "Integrate single archive",
-                        icon = Icons.AutoMirrored.Filled.NoteAdd,
-                        onClick = onImportFile,
-                        accent = true
-                    )
-                    AddOption(
-                        title = "SCAN FOLDER",
-                        subtitle = "Recursive search",
-                        icon = Icons.Default.CreateNewFolder,
-                        onClick = onScanFolder,
-                        accent = true
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(if (isLanServerRunning) ElectricIndigo.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.02f))
+                            .border(0.5.dp, if (isLanServerRunning) ElectricIndigo.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.06f), RoundedCornerShape(24.dp))
+                            .padding(16.dp)
+                    ) {
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        if (isLanServerRunning) Icons.Default.Wifi else Icons.Default.WifiOff,
+                                        null,
+                                        tint = if (isLanServerRunning) ElectricIndigo else Color.White.copy(alpha = 0.4f),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        if (isLanServerRunning) "SERVER ACTIVE" else "START ARCHIVE SERVER",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                                Switch(
+                                    checked = isLanServerRunning,
+                                    onCheckedChange = { onToggleLan() },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = ElectricIndigo
+                                    )
+                                )
+                            }
+                            if (isLanServerRunning && lanServerAddress != null) {
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    "Access from PC browser:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.5f)
+                                )
+                                Text(
+                                    lanServerAddress,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = ElectricIndigo,
+                                    letterSpacing = 1.sp
+                                )
+                                if (lanServerPin != null) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            "SERVER PIN: ",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White.copy(alpha = 0.5f)
+                                        )
+                                        Text(
+                                            lanServerPin,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Black,
+                                            color = Color.White,
+                                            letterSpacing = 2.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
-                // Section 2: Data Management
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Section 2: Local Sources
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "LOCAL ARCHIVES", 
+                        style = MaterialTheme.typography.labelSmall, 
+                        color = Color.White.copy(alpha = 0.3f), 
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 3.sp
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            AddOption(
+                                title = "IMPORT",
+                                subtitle = "Single file",
+                                icon = Icons.AutoMirrored.Filled.NoteAdd,
+                                onClick = onImportFile,
+                                compact = true
+                            )
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            AddOption(
+                                title = "SCAN",
+                                subtitle = "Folder",
+                                icon = Icons.Default.CreateNewFolder,
+                                onClick = onScanFolder,
+                                compact = true
+                            )
+                        }
+                    }
+                }
+
+                // Section 3: System State
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         "SYSTEM STATE", 
                         style = MaterialTheme.typography.labelSmall, 

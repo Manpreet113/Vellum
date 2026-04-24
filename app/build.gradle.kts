@@ -22,9 +22,9 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("keystore.jks")
-            storePassword = System.getenv("KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("KEY_ALIAS")
-            keyPassword = System.getenv("KEY_PASSWORD")
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "vellum"
+            keyAlias = System.getenv("KEY_ALIAS") ?: "vellum"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "vellum"
         }
     }
 
@@ -54,6 +54,11 @@ android {
     }
 
     packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/INDEX.LIST"
+            excludes += "META-INF/io.netty.versions.properties"
+        }
         jniLibs {
             keepDebugSymbols += setOf(
                 "**/libandroidx.graphics.path.so",
@@ -114,6 +119,11 @@ dependencies {
 
     // Okio
     implementation(libs.okio)
+
+    // Ktor Server
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.netty)
+    implementation(libs.ktor.server.html.builder)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

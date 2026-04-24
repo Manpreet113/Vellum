@@ -8,9 +8,13 @@ obj/
 .gradle-local/
 build/
 app/build/
+*.apk
+*.aar
+*.ap_
 
-# Kotlin sessions
+# Kotlin
 .kotlin/
+kotlin-js-store/
 
 # Local configuration file (sdk path, etc)
 local.properties
@@ -27,19 +31,17 @@ proguard/
 # Android Studio captures folder
 captures/
 
-# IntelliJ
+# IntelliJ / Android Studio
 *.iml
-.idea/workspace.xml
-.idea/tasks.xml
-.idea/libraries
-.idea/shelf
-.idea/dictionaries
-.idea/navEditor.xml
-.idea/assetWizardSettings.xml
-.idea/deploymentTargetSelector.xml
-.idea/caches/
+.idea/
+!.idea/codeStyles/
+!.idea/vcs.xml
+!.idea/misc.xml
+!.idea/modules.xml
+!.idea/copyright/
+!.idea/inspectionProfiles/
 
-# Keystore files
+# Keystore files (Critical: DO NOT REMOVE)
 *.jks
 *.keystore
 
