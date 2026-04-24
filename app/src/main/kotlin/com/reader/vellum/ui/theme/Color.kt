@@ -2,20 +2,23 @@ package com.reader.vellum.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Sharp, High-Contrast OLED Dark
-val PrimaryModern = Color(0xFFD0BCFF)
-val OnPrimaryModern = Color(0xFF381E72)
+// Neo-Reader Design System - High-Contrast Dark
+val ElectricIndigo = Color(0xFF6366F1)
+val InkBlack = Color(0xFF0A0A0A)
+val DeepCharcoal = Color(0xFF131313)
+val PureWhite = Color(0xFFFFFFFF)
+val GlassWhite = Color(0x1AFFFFFF) // 10% Opacity White for borders/glass
 
-val SurfaceDark = Color(0xFF000000) // Pure Black for OLED
-val SurfaceVariantDark = Color(0xFF1C1B1F) // Distinct dark grey for cards
+val PrimaryNeo = ElectricIndigo
+val OnPrimaryNeo = PureWhite
 
-val OnSurfaceDark = Color(0xFFE6E1E5) // High contrast off-white
-val OnSurfaceVariantDark = Color(0xFFCAC4D0) // Medium contrast grey
+val BackgroundNeo = DeepCharcoal
+val OnBackgroundNeo = PureWhite
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+val SurfaceNeo = InkBlack
+val OnSurfaceNeo = PureWhite
 
-val Purple40 = Color(0xFF6750A4)
-val PurpleGrey40 = Color(0xFF625B71)
-val Pink40 = Color(0xFF7D5260)
+val SurfaceVariantNeo = Color(0xFF1A1A1A)
+val OnSurfaceVariantNeo = Color(0xFFC7C4D7)
+
+val OutlineNeo = Color(0x33FFFFFF) // 20% Opacity White for subtle outlines

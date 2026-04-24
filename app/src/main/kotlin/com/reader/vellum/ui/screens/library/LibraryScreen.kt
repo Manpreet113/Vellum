@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -24,11 +25,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,8 +40,12 @@ import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import coil3.compose.AsyncImage
 import com.reader.vellum.data.local.CollectionInfo
-import com.reader.vellum.data.repository.SortOrder
 import com.reader.vellum.domain.model.Book
+import com.reader.vellum.ui.components.GlassmorphicSurface
+import com.reader.vellum.ui.components.indigoGlow
+import com.reader.vellum.ui.theme.ElectricIndigo
+import com.reader.vellum.ui.theme.GlassWhite
+import com.reader.vellum.ui.theme.InkBlack
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,15 +57,13 @@ fun LibraryScreen(
     val selectedTab by viewModel.selectedTab.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
     val scanProgress by viewModel.scanProgress.collectAsState()
-    val totalBookCount by viewModel.bookCount.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
-    val currentSort by viewModel.sortOrder.collectAsState()
     val selectedCollection by viewModel.selectedCollection.collectAsState()
     
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     var isSearchActive by remember { mutableStateOf(false) }
-    var showSortMenu by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showAddMenu by remember { mutableStateOf(false) }
 
     val directoryPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -71,6 +77,12 @@ fun LibraryScreen(
         }
     }
 
+    val filePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.importFile(it, onBookClick) }
+    }
+
     val backupLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri: Uri? -> uri?.let { viewModel.backupProgress(it) } }
@@ -79,94 +91,102 @@ fun LibraryScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? -> uri?.let { viewModel.restoreProgress(it) } }
 
-    val filePicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let { viewModel.importFile(it, onBookClick) }
-    }
-
     if (selectedCollection != null) {
         BackHandler { viewModel.onCollectionSelected(null) }
     }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            if (isSearchActive) {
-                SearchTopBar(
-                    query = searchQuery,
-                    onQueryChange = viewModel::onSearchQueryChanged,
-                    onClose = {
-                        isSearchActive = false
-                        viewModel.onSearchQueryChanged("")
+            Column(modifier = Modifier.statusBarsPadding()) {
+                if (isSearchActive) {
+                    GlassmorphicSurface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        shape = CircleShape
+                    ) {
+                        SearchTopBar(
+                            query = searchQuery,
+                            onQueryChange = viewModel::onSearchQueryChanged,
+                            onClose = {
+                                isSearchActive = false
+                                viewModel.onSearchQueryChanged("")
+                            }
+                        )
                     }
-                )
-            } else {
-                Column {
-                    TopAppBar(
-                        title = { 
-                            Text(
-                                if (selectedCollection != null) selectedCollection!! else "Library",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold
-                            ) 
-                        },
-                        navigationIcon = {
-                            if (selectedCollection != null) {
-                                IconButton(onClick = { viewModel.onCollectionSelected(null) }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                                }
-                            }
-                        },
-                        actions = {
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (selectedCollection != null) selectedCollection!!.uppercase() else "VELLUM",
+                            style = MaterialTheme.typography.displaySmall, // Epilogue bold
+                            letterSpacing = 4.sp,
+                            color = Color.White
+                        )
+                        Row {
                             IconButton(onClick = { isSearchActive = true }) {
-                                Icon(Icons.Default.Search, "Search")
-                            }
-                            IconButton(onClick = { showSortMenu = true }) {
-                                Icon(Icons.AutoMirrored.Filled.Sort, "Sort")
-                                SortDropdownMenu(
-                                    expanded = showSortMenu,
-                                    currentSort = currentSort,
-                                    onSortChange = viewModel::onSortOrderChanged,
-                                    onDismiss = { showSortMenu = false }
-                                )
+                                Icon(Icons.Default.Search, "Search", tint = Color.White)
                             }
                             IconButton(onClick = { showSettings = true }) {
-                                Icon(Icons.Default.Settings, "Settings")
+                                Icon(Icons.Default.Tune, "Settings", tint = Color.White)
                             }
-                            IconButton(onClick = {
-                                filePicker.launch(arrayOf(
-                                    "application/pdf",
-                                    "application/epub+zip",
-                                    "application/zip",
-                                    "application/x-cbz"
-                                ))
-                            }) {
-                                Icon(Icons.AutoMirrored.Filled.NoteAdd, "Open File")
-                            }
-                            IconButton(onClick = { directoryPicker.launch(null) }) {
-                                Icon(Icons.Default.Add, "Add Folder")
-                            }
-                        },
-                        scrollBehavior = scrollBehavior
-                    )
-                    
-                    if (selectedCollection == null) {
-                        PrimaryTabRow(
-                            selectedTabIndex = selectedTab.ordinal,
-                            divider = {}
+                        }
+                    }
+                }
+            }
+        },
+        bottomBar = {
+            if (selectedCollection == null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 32.dp, start = 24.dp, end = 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    GlassmorphicSurface(
+                        modifier = Modifier.indigoGlow(alpha = 0.1f),
+                        shape = CircleShape
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            LibraryTab.values().forEach { tab ->
-                                Tab(
-                                    selected = selectedTab == tab,
-                                    onClick = { viewModel.onTabSelected(tab) },
-                                    text = { 
-                                        Text(
-                                            tab.name.lowercase().replaceFirstChar { it.uppercase() },
-                                            style = MaterialTheme.typography.labelLarge
-                                        ) 
-                                    }
-                                )
+                            LibraryTab.entries.forEach { tab ->
+                                val selected = selectedTab == tab
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(if (selected) ElectricIndigo else Color.Transparent)
+                                        .clickable { viewModel.onTabSelected(tab) }
+                                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                                ) {
+                                    Text(
+                                        text = tab.name,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = if (selected) Color.White else Color.White.copy(alpha = 0.5f),
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        letterSpacing = 1.sp
+                                    )
+                                }
+                            }
+
+                            // Add Button
+                            IconButton(
+                                onClick = { showAddMenu = true },
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.05f))
+                            ) {
+                                Icon(Icons.Default.Add, "Add Content", tint = ElectricIndigo)
                             }
                         }
                     }
@@ -174,7 +194,7 @@ fun LibraryScreen(
             }
         }
     ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+        Box(modifier = Modifier.fillMaxSize().padding(top = innerPadding.calculateTopPadding())) {
             when {
                 selectedCollection != null -> {
                     val collItems = viewModel.booksInCollection.collectAsLazyPagingItems()
@@ -197,11 +217,36 @@ fun LibraryScreen(
         }
     }
 
+    if (showAddMenu) {
+        AddContentDialog(
+            onImportFile = {
+                showAddMenu = false
+                filePicker.launch(arrayOf(
+                    "application/pdf",
+                    "application/epub+zip",
+                    "application/zip",
+                    "application/x-cbz"
+                ))
+            },
+            onScanFolder = {
+                showAddMenu = false
+                directoryPicker.launch(null)
+            },
+            onBackup = {
+                showAddMenu = false
+                backupLauncher.launch("vellum_backup.json")
+            },
+            onRestore = {
+                showAddMenu = false
+                restoreLauncher.launch(arrayOf("application/json"))
+            },
+            onDismiss = { showAddMenu = false }
+        )
+    }
+
     if (showSettings) {
         SettingsDialog(
             viewModel = viewModel,
-            onBackup = { backupLauncher.launch("vellum_backup.json") },
-            onRestore = { restoreLauncher.launch(arrayOf("application/json")) },
             onDismiss = { showSettings = false }
         )
     }
@@ -213,11 +258,11 @@ fun CollectionsGrid(collections: List<CollectionInfo>, onCollectionClick: (Strin
         EmptyState("No collections found")
     } else {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(150.dp),
+            columns = GridCells.Adaptive(160.dp),
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 120.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             items(collections) { info ->
                 CollectionItem(info, onClick = { onCollectionClick(info.collectionName) })
@@ -228,31 +273,29 @@ fun CollectionsGrid(collections: List<CollectionInfo>, onCollectionClick: (Strin
 
 @Composable
 fun CollectionItem(info: CollectionInfo, onClick: () -> Unit) {
-    Card(
+    GlassmorphicSurface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            contentColor = MaterialTheme.colorScheme.onSurface
-        )
+        shape = RoundedCornerShape(32.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(Icons.Default.Folder, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(8.dp))
+            Icon(Icons.Default.Folder, null, modifier = Modifier.size(56.dp), tint = ElectricIndigo)
+            Spacer(Modifier.height(16.dp))
             Text(
-                text = info.collectionName ?: "Uncategorized",
+                text = info.collectionName ?: "UNCATEGORIZED",
                 style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.ExtraBold,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
             )
+            Spacer(Modifier.height(4.dp))
             Text(
-                text = "${info.bookCount} items",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "${info.bookCount} ITEMS",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.5f)
             )
         }
     }
@@ -270,14 +313,14 @@ fun BooksGrid(
     val isInitialLoading = pagingItems.loadState.refresh is LoadState.Loading
 
     if (pagingItems.itemCount == 0 && !isScanning && !isInitialLoading) {
-        EmptyState("No books found")
+        EmptyState("Your library is silent.")
     } else {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(130.dp),
+            columns = GridCells.Adaptive(150.dp),
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 120.dp, top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(40.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             if (isScanning) {
                 item(span = { GridItemSpan(maxLineSpan) }) { ScanningProgressCard(scanProgress) }
@@ -286,26 +329,33 @@ fun BooksGrid(
             if (showSections && continueReading.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Text(
-                        "Continue Reading",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        "IN PROGRESS",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = ElectricIndigo,
+                        letterSpacing = 2.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(bottom = 16.dp)
+                        horizontalArrangement = Arrangement.spacedBy(24.dp),
+                        contentPadding = PaddingValues(bottom = 40.dp)
                     ) {
                         items(continueReading) { book ->
                             ContinueReadingCard(book, onClick = { onBookClick(book.id) })
                         }
                     }
                 }
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    HorizontalDivider(modifier = Modifier.padding(bottom = 16.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
-                }
+            }
+
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    "COLLECTION",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White.copy(alpha = 0.3f),
+                    letterSpacing = 2.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
 
             items(pagingItems.itemCount) { index ->
@@ -319,71 +369,87 @@ fun BooksGrid(
 @Composable
 fun EmptyState(message: String) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            message, 
+            style = MaterialTheme.typography.headlineMedium, 
+            color = Color.White.copy(alpha = 0.2f),
+            textAlign = TextAlign.Center
+        )
     }
 }
 
 @Composable
 fun ScanningProgressCard(progress: com.reader.vellum.data.repository.ScanProgress?) {
     progress?.let { p ->
-        Column(modifier = Modifier.padding(bottom = 16.dp)) {
-            LinearProgressIndicator(
-                progress = { if (p.total > 0) p.current.toFloat() / p.total else 0f },
-                modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                if (p.total > 0) "Importing: ${p.current}/${p.total}" else "Scanning for files...",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
+        GlassmorphicSurface(
+            modifier = Modifier.padding(bottom = 24.dp).indigoGlow(alpha = 0.1f),
+            shape = RoundedCornerShape(24.dp)
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                LinearProgressIndicator(
+                    progress = { if (p.total > 0) p.current.toFloat() / p.total else 0f },
+                    modifier = Modifier.fillMaxWidth().height(2.dp).clip(CircleShape),
+                    color = ElectricIndigo,
+                    trackColor = Color.White.copy(alpha = 0.05f)
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    if (p.total > 0) "INTEGRATING CONTENT: ${p.current}/${p.total}" else "SCANNING ARCHIVES...",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ElectricIndigo,
+                    letterSpacing = 1.sp
+                )
+            }
         }
     }
 }
 
 @Composable
-fun ContinueReadingCard(book: Book, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.width(240.dp).clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-        )
+fun ContinueReadingCard(
+    book: Book, 
+    onClick: () -> Unit
+) {
+    GlassmorphicSurface(
+        modifier = Modifier
+            .width(300.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(32.dp)
     ) {
-        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             AsyncImage(
                 model = book.coverPath,
                 contentDescription = null,
                 modifier = Modifier
-                    .size(60.dp, 90.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .size(80.dp, 120.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .indigoGlow(alpha = 0.1f, borderRadius = 16.dp),
                 contentScale = ContentScale.Crop
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(20.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = book.title,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { book.progress.toFloat() },
-                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "${(book.progress * 100).toInt()}%",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.End)
+                    color = Color.White
+                )
+                Spacer(Modifier.height(16.dp))
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    LinearProgressIndicator(
+                        progress = { book.progress.toFloat() },
+                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
+                        color = ElectricIndigo,
+                        trackColor = Color.White.copy(alpha = 0.05f)
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "${(book.progress * 100).toInt()}% COMPLETE",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ElectricIndigo,
+                    fontWeight = FontWeight.ExtraBold
                 )
             }
         }
@@ -391,47 +457,56 @@ fun ContinueReadingCard(book: Book, onClick: () -> Unit) {
 }
 
 @Composable
-fun BookItem(book: Book, onClick: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.aspectRatio(0.7f).fillMaxWidth(),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+fun BookItem(
+    book: Book, 
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .aspectRatio(0.7f)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .border(0.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
+                .indigoGlow(alpha = 0.05f, borderRadius = 24.dp)
         ) {
-            Box {
-                AsyncImage(
-                    model = book.coverPath,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-                if (book.progress > 0) {
-                    LinearProgressIndicator(
-                        progress = { book.progress.toFloat() },
-                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(4.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = Color.Transparent
+            AsyncImage(
+                model = book.coverPath,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+            if (book.progress > 0) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(Color.Black.copy(alpha = 0.6f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(book.progress.toFloat())
+                            .background(ElectricIndigo)
                     )
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(16.dp))
         Text(
-            text = book.title,
-            style = MaterialTheme.typography.labelMedium,
+            text = book.title.uppercase(),
+            style = MaterialTheme.typography.labelLarge,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            letterSpacing = 0.5.sp
         )
-        if (book.collectionName != null) {
-            Text(
-                text = book.collectionName,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
-            )
-        }
     }
 }
 
@@ -440,66 +515,271 @@ fun SearchTopBar(query: String, onQueryChange: (String) -> Unit, onClose: () -> 
     TextField(
         value = query,
         onValueChange = onQueryChange,
-        modifier = Modifier.fillMaxWidth().statusBarsPadding(),
-        placeholder = { Text("Search your library...") },
-        leadingIcon = { Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurface) },
-        trailingIcon = { IconButton(onClick = onClose) { Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onSurface) } },
+        modifier = Modifier.fillMaxWidth(),
+        placeholder = { Text("FILTER ARCHIVES...", style = MaterialTheme.typography.labelLarge) },
+        leadingIcon = { Icon(Icons.Default.Search, null, tint = ElectricIndigo) },
+        trailingIcon = { IconButton(onClick = onClose) { Icon(Icons.Default.Close, null, tint = Color.White) } },
         colors = TextFieldDefaults.colors(
             focusedContainerColor = Color.Transparent,
             unfocusedContainerColor = Color.Transparent,
-            focusedTextColor = MaterialTheme.colorScheme.onSurface,
-            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+            focusedTextColor = Color.White,
+            unfocusedTextColor = Color.White,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent
         ),
         singleLine = true
     )
 }
 
 @Composable
-fun SortDropdownMenu(expanded: Boolean, currentSort: SortOrder, onSortChange: (SortOrder) -> Unit, onDismiss: () -> Unit) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        SortOrder.values().forEach { order ->
-            DropdownMenuItem(
-                text = { Text(order.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }) },
-                onClick = { onSortChange(order); onDismiss() },
-                leadingIcon = { if (currentSort == order) Icon(Icons.Default.Check, null) }
+fun AddContentDialog(
+    onImportFile: () -> Unit,
+    onScanFolder: () -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF080808), // Darker Ink Black
+        modifier = Modifier
+            .border(0.5.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(40.dp))
+            .indigoGlow(alpha = 0.1f, borderRadius = 40.dp, blurRadius = 60.dp),
+        title = { 
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(4.dp)
+                        .background(ElectricIndigo.copy(alpha = 0.4f), CircleShape)
+                        .padding(bottom = 12.dp)
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "INTEGRATION", 
+                    style = MaterialTheme.typography.headlineSmall, 
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 8.sp, // Ultra-wide for futuristic feel
+                    color = Color.White
+                )
+            }
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(32.dp), 
+                modifier = Modifier.padding(top = 16.dp)
+            ) {
+                // Section 1: Content Sources
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        "ARCHIVE SOURCES", 
+                        style = MaterialTheme.typography.labelSmall, 
+                        color = ElectricIndigo, 
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 3.sp
+                    )
+                    AddOption(
+                        title = "FILE IMPORT",
+                        subtitle = "Integrate single archive",
+                        icon = Icons.AutoMirrored.Filled.NoteAdd,
+                        onClick = onImportFile,
+                        accent = true
+                    )
+                    AddOption(
+                        title = "SCAN FOLDER",
+                        subtitle = "Recursive search",
+                        icon = Icons.Default.CreateNewFolder,
+                        onClick = onScanFolder,
+                        accent = true
+                    )
+                }
+
+                // Section 2: Data Management
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        "SYSTEM STATE", 
+                        style = MaterialTheme.typography.labelSmall, 
+                        color = Color.White.copy(alpha = 0.2f), 
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 3.sp
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            AddOption(
+                                title = "BACKUP",
+                                subtitle = "Export",
+                                icon = Icons.Default.CloudUpload,
+                                onClick = onBackup,
+                                compact = true
+                            )
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            AddOption(
+                                title = "RESTORE",
+                                subtitle = "Import",
+                                icon = Icons.Default.CloudDownload,
+                                onClick = onRestore,
+                                compact = true
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { 
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp), 
+                contentAlignment = Alignment.Center
+            ) {
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.05f))
+                        .padding(horizontal = 24.dp)
+                ) { 
+                    Text(
+                        "DISMISS", 
+                        color = Color.White.copy(alpha = 0.6f), 
+                        fontWeight = FontWeight.Bold, 
+                        letterSpacing = 2.sp,
+                        style = MaterialTheme.typography.labelMedium
+                    ) 
+                }
+            }
+        }
+    )
+}
+
+@Composable
+fun AddOption(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    compact: Boolean = false,
+    accent: Boolean = false
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.White.copy(alpha = if (accent) 0.04f else 0.02f))
+            .border(
+                width = 0.5.dp, 
+                color = if (accent) ElectricIndigo.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.06f), 
+                shape = RoundedCornerShape(24.dp)
             )
+            .clickable(onClick = onClick)
+            .padding(if (compact) 16.dp else 20.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (compact) Arrangement.Center else Arrangement.Start,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                icon, 
+                null, 
+                tint = if (accent) ElectricIndigo else Color.White.copy(alpha = 0.6f), 
+                modifier = Modifier
+                    .size(if (compact) 24.dp else 28.dp)
+                    .then(if (accent) Modifier.indigoGlow(alpha = 0.4f, blurRadius = 16.dp) else Modifier)
+            )
+            if (!compact) {
+                Spacer(Modifier.width(20.dp))
+                Column {
+                    Text(
+                        title, 
+                        style = MaterialTheme.typography.labelLarge, 
+                        fontWeight = FontWeight.ExtraBold, 
+                        color = Color.White,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        subtitle.uppercase(), 
+                        style = MaterialTheme.typography.labelSmall, 
+                        color = Color.White.copy(alpha = 0.3f),
+                        letterSpacing = 1.sp
+                    )
+                }
+            } else {
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    title, 
+                    style = MaterialTheme.typography.labelSmall, 
+                    fontWeight = FontWeight.Bold, 
+                    color = Color.White,
+                    letterSpacing = 1.sp
+                )
+            }
         }
     }
 }
 
 @Composable
-fun SettingsDialog(viewModel: LibraryViewModel, onBackup: () -> Unit, onRestore: () -> Unit, onDismiss: () -> Unit) {
+fun SettingsDialog(viewModel: LibraryViewModel, onDismiss: () -> Unit) {
     val mangaMode by viewModel.mangaMode.collectAsState(false)
-    val tapToTurn by viewModel.tapToTurn.collectAsState(true)
-    val volumeKeys by viewModel.volumeKeys.collectAsState(false)
-    val hideCompleted by viewModel.hideCompleted.collectAsState(true)
     val adaptiveChroma by viewModel.adaptiveChroma.collectAsState(true)
+    val volumeKeys by viewModel.volumeKeys.collectAsState(false)
+    val tapToTurn by viewModel.tapToTurn.collectAsState(true)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Settings", style = MaterialTheme.typography.headlineSmall) },
+        containerColor = Color(0xFF0F0F0F),
+        modifier = Modifier.border(0.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(28.dp)),
+        title = { 
+            Text(
+                "SYSTEM SETTINGS", 
+                style = MaterialTheme.typography.headlineSmall, 
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 2.sp
+            ) 
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                SettingsToggle("Manga Mode", mangaMode, viewModel::setMangaMode)
-                SettingsToggle("Adaptive Colors", adaptiveChroma, viewModel::setAdaptiveChroma)
-                SettingsToggle("Volume Navigation", volumeKeys, viewModel::setVolumeKeys)
-                SettingsToggle("Tap Navigation", tapToTurn, viewModel::setTapToTurn)
-                SettingsToggle("Hide Completed", hideCompleted, viewModel::setHideCompleted)
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onBackup, modifier = Modifier.weight(1f)) { Text("Backup") }
-                    Button(onClick = onRestore, modifier = Modifier.weight(1f)) { Text("Restore") }
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(24.dp), modifier = Modifier.padding(vertical = 8.dp)) {
+                SettingsToggle("MANGA MODE (RTL)", mangaMode, viewModel::setMangaMode)
+                SettingsToggle("ADAPTIVE CHROMATICITY", adaptiveChroma, viewModel::setAdaptiveChroma)
+                SettingsToggle("VOLUME NAVIGATION", volumeKeys, viewModel::setVolumeKeys)
+                SettingsToggle("TAP ZONE NAVIGATION", tapToTurn, viewModel::setTapToTurn)
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+        confirmButton = { 
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = ElectricIndigo),
+                shape = CircleShape
+            ) { 
+                Text("DISMISS", fontWeight = FontWeight.Bold) 
+            } 
+        }
     )
 }
 
 @Composable
 fun SettingsToggle(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Text(
+            label, 
+            style = MaterialTheme.typography.labelLarge, 
+            color = Color.White,
+            fontWeight = FontWeight.SemiBold
+        )
+        Switch(
+            checked = checked, 
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = ElectricIndigo,
+                uncheckedThumbColor = Color.White.copy(alpha = 0.4f),
+                uncheckedTrackColor = Color.White.copy(alpha = 0.1f),
+                uncheckedBorderColor = Color.Transparent
+            )
+        )
     }
 }
