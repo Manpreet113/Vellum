@@ -43,13 +43,16 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
+      - name: Rename apk
+        run: mv app/build/outputs/apk/debug/app-release.apk Vellum-v${{ env.VERSION_NAME }}.apk
+      
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION_NAME }}-${{ github.run_number }}
-          name: Vellum v${{ env.VERSION_NAME }} (Build ${{ github.run_number }})
+          name: Vellum v${{ env.VERSION_NAME }}-${{ github.run_number }})
           draft: false
           prerelease: false
-          files: app/build/outputs/apk/release/app-release.apk
+          files: app/build/outputs/apk/release/Vellum-v${{ env.VERSION_NAME }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
