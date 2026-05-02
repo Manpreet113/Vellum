@@ -14,7 +14,7 @@ android {
         minSdk = 26
         targetSdk = 37
         versionCode = 1
-        versionName = "1.0"
+        versionName = "0.1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -95,32 +95,27 @@ dependencies {
     implementation(libs.androidx.material.icons.extended)
     implementation(libs.material)
     
-    // Room
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     implementation(libs.room.paging)
     ksp(libs.room.compiler)
-    
-    // Hilt
+
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    
-    // Coil
+
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
-    
-    // Paging
+
     implementation(libs.paging.runtime)
     implementation(libs.paging.compose)
-    
-    // Navigation
+
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.hilt.navigation.compose)
-
-    // Okio
     implementation(libs.okio)
-
-    // Ktor Server
+    implementation(libs.epublib.core) {
+        exclude(group = "net.sf.kxml", module = "kxml2")
+        exclude(group = "xmlpull", module = "xmlpull")
+    }
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.html.builder)

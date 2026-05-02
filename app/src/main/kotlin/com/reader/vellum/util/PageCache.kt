@@ -3,9 +3,7 @@ package com.reader.vellum.util
 import android.util.LruCache
 
 object PageCache {
-    // Cache for uncompressed page data
-    // Key: "uriString|entryName"
-    private val cache = object : LruCache<String, ByteArray>(20 * 1024 * 1024) { // 20MB cache
+    private val cache = object : LruCache<String, ByteArray>(20 * 1024 * 1024) {
         override fun sizeOf(key: String, value: ByteArray): Int {
             return value.size
         }

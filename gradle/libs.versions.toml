@@ -19,6 +19,7 @@ palette = "1.0.0"
 documentfile = "1.1.0"
 datastore = "1.2.1"
 ktor = "3.1.1"
+epublib = "3.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -58,6 +59,7 @@ okio = { group = "com.squareup.okio", name = "okio", version.ref = "okio" }
 ktor-server-core = { group = "io.ktor", name = "ktor-server-core", version.ref = "ktor" }
 ktor-server-netty = { group = "io.ktor", name = "ktor-server-netty", version.ref = "ktor" }
 ktor-server-html-builder = { group = "io.ktor", name = "ktor-server-html-builder", version.ref = "ktor" }
+epublib-core = { group = "com.positiondev.epublib", name = "epublib-core", version.ref = "epublib" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

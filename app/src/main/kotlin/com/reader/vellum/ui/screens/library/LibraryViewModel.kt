@@ -12,8 +12,6 @@ import com.reader.vellum.data.repository.FileScannerRepository
 import com.reader.vellum.data.repository.ScanProgress
 import com.reader.vellum.data.repository.SortOrder
 import com.reader.vellum.domain.model.Book
-import com.reader.vellum.util.SettingsManager
-import com.reader.vellum.util.TiltSensorManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,7 +29,7 @@ enum class LibraryTab {
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val bookRepository: BookRepository,
     private val fileScannerRepository: FileScannerRepository,
     private val bookParser: com.reader.vellum.util.BookParser,
@@ -213,7 +211,6 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    // Settings methods
     fun setMangaMode(enabled: Boolean) = viewModelScope.launch { settingsManager.setMangaMode(enabled) }
     fun setTapToTurn(enabled: Boolean) = viewModelScope.launch { settingsManager.setTapToTurn(enabled) }
     fun setVolumeKeys(enabled: Boolean) = viewModelScope.launch { settingsManager.setVolumeKeys(enabled) }

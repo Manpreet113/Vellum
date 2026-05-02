@@ -24,10 +24,8 @@ class TiltSensorManager @Inject constructor(
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent?) {
                 if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
-                    // Extract tilt values (x and y)
-                    // Normalizing and smoothing slightly
-                    val x = -event.values[0] * 2f // Horizontal tilt
-                    val y = event.values[1] * 2f  // Vertical tilt
+                    val x = -event.values[0] * 2f
+                    val y = event.values[1] * 2f
                     trySend(Offset(x, y))
                 }
             }
@@ -36,7 +34,7 @@ class TiltSensorManager @Inject constructor(
         }
 
         sensorManager.registerListener(listener, accelerometer, SensorManager.SENSOR_DELAY_UI)
-        
+
         awaitClose {
             sensorManager.unregisterListener(listener)
         }

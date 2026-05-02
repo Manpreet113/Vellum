@@ -13,11 +13,30 @@ import com.reader.vellum.domain.model.Book
 import com.reader.vellum.util.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.zip.ZipFile
 import javax.inject.Inject
 
+data class EpubLocator(
+    val chapterIndex: Int = 0,
+    val chapterProgress: Float = 0f
+) {
+    fun encode(): String = "$chapterIndex|$chapterProgress"
+
+    companion object {
+        fun decode(raw: String?): EpubLocator? {
+            if (raw.isNullOrBlank()) return null
+            val parts = raw.split("|", limit = 2)
+            val chapterIndex = parts.getOrNull(0)?.toIntOrNull() ?: return null
+            val chapterProgress = parts.getOrNull(1)?.toFloatOrNull() ?: 0f
+            return EpubLocator(chapterIndex, chapterProgress.coerceIn(0f, 1f))
+        }
+    }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ReaderViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -37,15 +56,41 @@ class ReaderViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow<ReaderUiState>(ReaderUiState.Loading)
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
+    private val _epubManifest = MutableStateFlow<EpubManifest?>(null)
+    val epubManifest: StateFlow<EpubManifest?> = _epubManifest.asStateFlow()
+    private val currentBookId = MutableStateFlow<String?>(null)
 
     val mangaMode = settingsManager.mangaMode
     val tapToTurn = settingsManager.tapToTurn
     val volumeKeys = settingsManager.volumeKeys
     val adaptiveChroma = settingsManager.adaptiveChroma
 
+    val epubFontSize = settingsManager.epubFontSize
+    val epubFontFamily = settingsManager.epubFontFamily
+    val epubLineHeight = settingsManager.epubLineHeight
+    val epubTheme = settingsManager.epubTheme
+    val epubMargin = settingsManager.epubMargin
+
+    val epubStyle = combine(
+        epubFontSize, epubFontFamily, epubLineHeight, epubTheme, epubMargin
+    ) { size, family, height, theme, margin ->
+        EpubStyle(size, family, height, theme, margin)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), EpubStyle(18f, "serif", 1.5f, "dark", 24))
+
+    val epubLocator = currentBookId
+        .flatMapLatest { bookId ->
+            if (bookId == null) {
+                flowOf(EpubLocator())
+            } else {
+                settingsManager.getEpubLocator(bookId).map { raw -> EpubLocator.decode(raw) ?: EpubLocator() }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), EpubLocator())
+
     private var prefetchJob: Job? = null
     private var progressUpdateJob: Job? = null
     private var pendingProgress: PendingProgress? = null
+    private var pendingEpubLocator: Pair<String, EpubLocator>? = null
     val hardwareEvents = hardwareEventManager.events
     private val epubParser = EpubParser(context)
 
@@ -53,25 +98,25 @@ class ReaderViewModel @Inject constructor(
         viewModelScope.launch {
             flushPendingProgress()
 
-            // If already loading or loaded the same book, skip
             val current = _uiState.value
             if (current is ReaderUiState.Success && current.book.id == id) return@launch
-            
+
             _uiState.value = ReaderUiState.Loading
             val book = withContext(Dispatchers.IO) {
                 bookRepository.getBookById(id)
             }
-            
+
             if (book == null) {
                 _uiState.value = ReaderUiState.Error("Book not found")
                 return@launch
             }
+            currentBookId.value = book.id
+            _epubManifest.value = null
 
-            // Extract Accent Color in background
             val accentColor = withContext(Dispatchers.IO) {
                 try {
                     book.coverPath?.let { path ->
-                        val options = BitmapFactory.Options().apply { inSampleSize = 4 } // Scale down for speed
+                        val options = BitmapFactory.Options().apply { inSampleSize = 4 }
                         val bitmap = BitmapFactory.decodeFile(path, options)
                         if (bitmap != null) {
                             val palette = Palette.from(bitmap).generate()
@@ -112,20 +157,32 @@ class ReaderViewModel @Inject constructor(
                     }
                 }
                 "epub" -> {
-                    val pages = withContext(Dispatchers.IO) {
+                    val manifest: EpubManifest? = withContext(Dispatchers.IO) {
                         try {
-                            val manifest = epubParser.getManifest(Uri.parse(book.uriString ?: book.filePath))
-                            manifest.spine.map { path ->
-                                EpubPageRequest(book.uriString ?: book.filePath, path)
-                            }
-                        } catch (e: Exception) { emptyList() }
+                            epubParser.getManifest(Uri.parse(book.uriString ?: book.filePath))
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                    if (manifest == null) {
+                        _uiState.value = ReaderUiState.Error("Failed to load EPUB content")
+                        return@launch
+                    }
+                    _epubManifest.value = manifest
+                    val pages = manifest.spine.map { path ->
+                        EpubPageRequest(book.uriString ?: book.filePath, path)
                     }
                     if (pages.isEmpty()) {
                         _uiState.value = ReaderUiState.Error("Failed to load EPUB content")
                     } else {
-                        val initialPage = if (pages.isNotEmpty()) {
-                            (book.progress * (pages.size - 1)).toInt().coerceIn(0, pages.size - 1)
-                        } else 0
+                        val savedLocator = settingsManager.getEpubLocator(book.id).firstOrNull()?.let(EpubLocator::decode)
+                        val defaultInitialPage = resolveDefaultEpubPage(manifest.spine)
+                        val initialPage = savedLocator?.chapterIndex?.coerceIn(0, pages.size - 1)
+                            ?: if (book.progress > 0.0) {
+                                (book.progress * (pages.size - 1)).toInt().coerceIn(0, pages.size - 1)
+                            } else {
+                                defaultInitialPage
+                            }
                         _uiState.value = ReaderUiState.Success(book, pages, initialPage, accentColor)
                     }
                 }
@@ -138,7 +195,7 @@ class ReaderViewModel @Inject constructor(
 
     private fun startPrefetching(uriString: String, pages: List<Any>, startFrom: Int) {
         if (pages.isEmpty() || pages[0] !is CbzPageRequest) return
-        
+
         prefetchJob?.cancel()
         prefetchJob = viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -217,10 +274,33 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
+    fun updateEpubLocation(chapterIndex: Int, chapterProgress: Float) {
+        val state = uiState.value as? ReaderUiState.Success ?: return
+        if (state.book.format != "epub") return
+
+        val normalizedChapterIndex = chapterIndex.coerceIn(0, state.pages.lastIndex.coerceAtLeast(0))
+        val locator = EpubLocator(
+            chapterIndex = normalizedChapterIndex,
+            chapterProgress = chapterProgress.coerceIn(0f, 1f)
+        )
+        pendingEpubLocator = state.book.id to locator
+        updateProgress(normalizedChapterIndex)
+        progressUpdateJob?.cancel()
+        progressUpdateJob = viewModelScope.launch(Dispatchers.IO) {
+            delay(PROGRESS_WRITE_DEBOUNCE_MS)
+            flushPendingProgress()
+        }
+    }
+
     private suspend fun flushPendingProgress() {
         val update = pendingProgress ?: return
         pendingProgress = null
         bookRepository.updateReadingProgress(update.bookId, update.progress, update.lastRead)
+        val locatorUpdate = pendingEpubLocator
+        if (locatorUpdate?.first == update.bookId) {
+            settingsManager.setEpubLocator(locatorUpdate.first, locatorUpdate.second.encode())
+            pendingEpubLocator = null
+        }
     }
 
     fun setMangaMode(enabled: Boolean) = viewModelScope.launch { settingsManager.setMangaMode(enabled) }
@@ -228,8 +308,53 @@ class ReaderViewModel @Inject constructor(
     fun setVolumeKeys(enabled: Boolean) = viewModelScope.launch { settingsManager.setVolumeKeys(enabled) }
     fun setAdaptiveChroma(enabled: Boolean) = viewModelScope.launch { settingsManager.setAdaptiveChroma(enabled) }
 
+    fun setEpubFontSize(size: Float) = viewModelScope.launch { settingsManager.setEpubFontSize(size) }
+    fun setEpubFontFamily(family: String) = viewModelScope.launch { settingsManager.setEpubFontFamily(family) }
+    fun setEpubLineHeight(height: Float) = viewModelScope.launch { settingsManager.setEpubLineHeight(height) }
+    fun setEpubTheme(theme: String) = viewModelScope.launch { settingsManager.setEpubTheme(theme) }
+    fun setEpubMargin(margin: Int) = viewModelScope.launch { settingsManager.setEpubMargin(margin) }
+
     suspend fun getEpubChapter(uriString: String, path: String): String = withContext(Dispatchers.IO) {
         epubParser.getChapterContent(Uri.parse(uriString), path)
+    }
+
+    fun prefetchEpubChapters(uriString: String, chapterPaths: List<String>) {
+        if (chapterPaths.isEmpty()) return
+
+        prefetchJob?.cancel()
+        prefetchJob = viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                epubParser.prefetchChapters(Uri.parse(uriString), chapterPaths)
+            }.onFailure { error ->
+                Log.e("ReaderViewModel", "EPUB prefetch failed", error)
+            }
+        }
+    }
+
+    suspend fun getEpubManifest(uriString: String): EpubManifest = withContext(Dispatchers.IO) {
+        epubParser.getManifest(Uri.parse(uriString))
+    }
+
+    private fun resolveDefaultEpubPage(spine: List<String>): Int {
+        if (spine.isEmpty()) return 0
+
+        val preferredIndex = spine.indexOfFirst { path ->
+            val fileName = path.substringAfterLast('/').lowercase()
+            fileName.matches(Regex("""ch\d+.*\.(xhtml|html|htm)$""")) ||
+                "chapter" in fileName
+        }
+        if (preferredIndex >= 0) return preferredIndex
+
+        val readableIndex = spine.indexOfFirst { path ->
+            val fileName = path.substringAfterLast('/').lowercase()
+            !fileName.startsWith("cover") &&
+                !fileName.startsWith("title") &&
+                !fileName.startsWith("copyright") &&
+                !fileName.startsWith("toc") &&
+                !fileName.startsWith("colophon")
+        }
+
+        return readableIndex.takeIf { it >= 0 } ?: 0
     }
 
     override fun onCleared() {

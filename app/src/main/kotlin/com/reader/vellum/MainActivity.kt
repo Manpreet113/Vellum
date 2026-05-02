@@ -83,7 +83,6 @@ fun VellumApp(mainViewModel: MainViewModel) {
         mainViewModel.navigateToReader.collectLatest { bookId ->
             val encodedId = URLEncoder.encode(bookId, "UTF-8")
             navController.navigate("reader/$encodedId") {
-                // Pop up to library to avoid stacking readers if multiple intents are received
                 popUpTo("library") { saveState = true }
                 launchSingleTop = true
                 restoreState = true
@@ -106,9 +105,6 @@ fun VellumApp(mainViewModel: MainViewModel) {
             arguments = listOf(navArgument("bookId") { type = NavType.StringType })
         ) { backStackEntry ->
             val bookId = backStackEntry.arguments?.getString("bookId") ?: return@composable
-            // Navigation automatically decodes path segments, but double-check if manual decoding is needed.
-            // Actually NavType.StringType doesn't automatically decode if it was encoded for the route.
-            // Wait, compose navigation DOES decode arguments.
             ReaderScreen(
                 id = bookId,
                 viewModel = hiltViewModel(),

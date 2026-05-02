@@ -11,9 +11,6 @@ import coil3.request.Options
 import okio.Buffer
 import java.util.zip.ZipFile
 
-/**
- * Request for a specific image inside a CBZ/ZIP file.
- */
 data class CbzPageRequest(val uriString: String, val entryName: String)
 
 class CbzFetcher(
@@ -23,7 +20,6 @@ class CbzFetcher(
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult {
-        // Check cache first
         val cachedData = PageCache.get(request.uriString, request.entryName)
         if (cachedData != null) {
             return SourceFetchResult(

@@ -51,8 +51,7 @@ class FileScannerRepository @Inject constructor(
         }
 
         val allSupportedFiles = mutableListOf<ScannedFile>()
-        
-        // Initial state: Scanning
+
         send(ScanProgress(0, 0, "Initializing scan..."))
 
         suspend fun walk(doc: DocumentFile, collectionName: String?) {
@@ -74,7 +73,6 @@ class FileScannerRepository @Inject constructor(
                                 uriString = child.uri.toString()
                             )
                         )
-                        // Update UI every 10 files found during walk
                         if (allSupportedFiles.size % 10 == 0) {
                             send(ScanProgress(0, 0, "Found ${allSupportedFiles.size} files..."))
                         }
@@ -108,7 +106,6 @@ class FileScannerRepository @Inject constructor(
             send(ScanProgress(skipped, total, "Skipped ${existingPaths.size} existing books"))
         }
 
-        // Process new files with bounded parallelism.
         withContext(Dispatchers.IO) {
             supervisorScope {
                 filesToProcess.forEach { scannedFile ->
