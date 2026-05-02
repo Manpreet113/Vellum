@@ -15,6 +15,7 @@ object ReaderContentCache {
 
     fun putCbzPageNames(uriString: String, pageNames: List<String>) = synchronized(cbzPageLists) {
         cbzPageLists.put(uriString, pageNames)
+        Unit
     }
 
     fun getEpubManifest(uriString: String): EpubManifest? = synchronized(epubManifests) {
@@ -23,6 +24,7 @@ object ReaderContentCache {
 
     fun putEpubManifest(uriString: String, manifest: EpubManifest) = synchronized(epubManifests) {
         epubManifests.put(uriString, manifest)
+        Unit
     }
 
     fun getEpubChapter(uriString: String, chapterPath: String): String? = synchronized(epubChapters) {
@@ -31,5 +33,6 @@ object ReaderContentCache {
 
     fun putEpubChapter(uriString: String, chapterPath: String, html: String) = synchronized(epubChapters) {
         epubChapters.put("$uriString|$chapterPath", html)
+        Unit
     }
 }

@@ -23,7 +23,7 @@ data class Book(
     val filePath: String,
     val uriString: String? = null,
     val coverPath: String?,
-    val format: String, // "cbz", "epub", "pdf"
+    val format: String,
     val progress: Double = 0.0,
     val totalPages: Int = 0,
     val lastRead: Long = System.currentTimeMillis(),

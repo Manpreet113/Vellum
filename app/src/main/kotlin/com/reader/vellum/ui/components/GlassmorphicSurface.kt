@@ -49,7 +49,6 @@ fun GlassmorphicSurface(
                 shape = shape
             )
     ) {
-        // Subtle inner highlight
         Box(
             modifier = Modifier
                 .matchParentSize()

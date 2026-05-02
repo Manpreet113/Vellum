@@ -30,7 +30,7 @@ import javax.inject.Singleton
 
 @Singleton
 class LanTransferManager @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val bookRepository: BookRepository,
     private val bookParser: BookParser
 ) {
@@ -199,15 +199,14 @@ class LanTransferManager @Inject constructor(
 
                     val multipart = call.receiveMultipart()
                     multipart.forEachPart { part ->
-                        if (part is PartData.FileItem) {
-                            val fileName = part.originalFileName ?: "unknown"
-                            val file = File(context.filesDir, fileName)
-                            part.provider().copyTo(file.outputStream())
-                            
-                            // Process the integrated book
-                            withContext(Dispatchers.IO) {
-                                val document = DocumentFile.fromFile(file)
-                                val book = bookParser.parseDocumentFile(document, "LAN Transfer")
+	                        if (part is PartData.FileItem) {
+	                            val fileName = part.originalFileName ?: "unknown"
+	                            val file = File(context.filesDir, fileName)
+	                            part.provider().copyTo(file.outputStream())
+
+	                            withContext(Dispatchers.IO) {
+	                                val document = DocumentFile.fromFile(file)
+	                                val book = bookParser.parseDocumentFile(document, "LAN Transfer")
                                 if (book != null) {
                                     bookRepository.upsertBook(book)
                                 }

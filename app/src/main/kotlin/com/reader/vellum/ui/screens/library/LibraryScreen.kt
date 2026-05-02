@@ -129,7 +129,7 @@ fun LibraryScreen(
                     ) {
                         Text(
                             text = if (selectedCollection != null) selectedCollection!!.uppercase() else "VELLUM",
-                            style = MaterialTheme.typography.displaySmall, // Epilogue bold
+                            style = MaterialTheme.typography.displaySmall,
                             letterSpacing = 4.sp,
                             color = Color.White
                         )
@@ -181,7 +181,6 @@ fun LibraryScreen(
                                 }
                             }
 
-                            // Add Button
                             IconButton(
                                 onClick = { showAddMenu = true },
                                 modifier = Modifier
@@ -552,7 +551,7 @@ fun AddContentDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF080808), // Darker Ink Black
+        containerColor = Color(0xFF080808),
         modifier = Modifier
             .border(0.5.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(40.dp))
             .indigoGlow(alpha = 0.1f, borderRadius = 40.dp, blurRadius = 60.dp),
@@ -583,7 +582,6 @@ fun AddContentDialog(
                 verticalArrangement = Arrangement.spacedBy(28.dp), 
                 modifier = Modifier.padding(top = 16.dp)
             ) {
-                // Section 1: Wireless Transfer (New)
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         "WIRELESS INTEGRATION", 
@@ -666,7 +664,6 @@ fun AddContentDialog(
                     }
                 }
 
-                // Section 2: Local Sources
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         "LOCAL ARCHIVES", 
@@ -697,7 +694,6 @@ fun AddContentDialog(
                     }
                 }
 
-                // Section 3: System State
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         "SYSTEM STATE", 

@@ -16,9 +16,6 @@ import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/**
- * Request for a specific page in a PDF file.
- */
 data class PdfPageRequest(val uriString: String, val pageIndex: Int)
 
 class PdfFetcher(
@@ -28,14 +25,11 @@ class PdfFetcher(
 ) : Fetcher {
 
     companion object {
-        // PdfRenderer is not thread-safe across different instances opening the same PFD
         private val mutex = Mutex()
     }
 
     override suspend fun fetch(): FetchResult = mutex.withLock {
         val uri = Uri.parse(request.uriString)
-        
-        // Use cache for PDF renders too!
         val cacheKey = "pdf_${request.pageIndex}"
         val cachedData = PageCache.get(request.uriString, cacheKey)
         if (cachedData != null) {
@@ -57,14 +51,12 @@ class PdfFetcher(
             }
 
             renderer.openPage(request.pageIndex).use { page ->
-                // Render at high quality (e.g., 2.0x)
                 val scale = 2.0
                 val bitmap = Bitmap.createBitmap(
                     (page.width * scale).toInt(),
                     (page.height * scale).toInt(),
                     Bitmap.Config.ARGB_8888
                 )
-                // PDFs often have transparent backgrounds, fill with white for correct contrast/colors
                 val canvas = android.graphics.Canvas(bitmap)
                 canvas.drawColor(android.graphics.Color.WHITE)
                 
@@ -74,8 +66,6 @@ class PdfFetcher(
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
                 val data = stream.toByteArray()
                 bitmap.recycle()
-
-                // Cache it
                 PageCache.put(request.uriString, cacheKey, data)
 
                 return SourceFetchResult(
