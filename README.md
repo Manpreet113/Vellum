@@ -2,6 +2,11 @@
   <img src="metadata/logo.png" alt="Vellum Logo" width="240">
 </p>
 
+> [!WARNING]
+> Development on Vellum is on hold for now. I’ve kind of hit my limit with where I want to take it, so this is what it is at the moment.
+>
+> I’m still around for bug fixes though — if something breaks or feels off, open an issue and I’ll take a look.
+
 <p align="center">
   Vellum is a minimalist reader for Android. It provides a focused environment for Comic Archives (CBZ), EPUBs, and PDFs, utilizing high-contrast design and glassmorphic interfaces.
 </p>
