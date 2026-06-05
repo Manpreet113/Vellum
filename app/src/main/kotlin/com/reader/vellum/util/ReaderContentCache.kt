@@ -5,9 +5,7 @@ import android.util.LruCache
 object ReaderContentCache {
     private val cbzPageLists = object : LruCache<String, List<String>>(64) {}
     private val epubManifests = object : LruCache<String, EpubManifest>(32) {}
-    private val epubChapters = object : LruCache<String, String>(32) {
-        override fun sizeOf(key: String, value: String): Int = value.length
-    }
+    private val epubChapters = LruCache<String, String>(32)
 
     fun getCbzPageNames(uriString: String): List<String>? = synchronized(cbzPageLists) {
         cbzPageLists.get(uriString)

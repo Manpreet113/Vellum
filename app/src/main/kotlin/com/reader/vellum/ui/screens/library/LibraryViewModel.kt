@@ -53,7 +53,7 @@ class LibraryViewModel @Inject constructor(
     private val _sortOrder = MutableStateFlow(SortOrder.RECENT)
     val sortOrder: StateFlow<SortOrder> = _sortOrder.asStateFlow()
 
-    private val _selectedTab = MutableStateFlow(LibraryTab.COLLECTIONS)
+    private val _selectedTab = MutableStateFlow(LibraryTab.BOOKS)
     val selectedTab: StateFlow<LibraryTab> = _selectedTab.asStateFlow()
 
     val tilt = tiltSensorManager.tiltFlow
@@ -64,22 +64,37 @@ class LibraryViewModel @Inject constructor(
     val tapToTurn = settingsManager.tapToTurn
     val volumeKeys = settingsManager.volumeKeys
     val adaptiveChroma = settingsManager.adaptiveChroma
+    val keepScreenOn = settingsManager.keepScreenOn
+    val hqScaling = settingsManager.hqScaling
+    val longPressMenu = settingsManager.longPressMenu
 
     val isLanServerRunning = lanTransferManager.isServerRunning
     val lanServerAddress = lanTransferManager.serverAddress
     val lanServerPin = lanTransferManager.serverPin
 
     fun toggleLanServer() {
-        if (lanTransferManager.isServerRunning.value) {
-            lanTransferManager.stopServer()
-        } else {
-            lanTransferManager.startServer()
+        viewModelScope.launch {
+            if (lanTransferManager.isServerRunning.value) {
+                lanTransferManager.stopServer()
+            } else {
+                lanTransferManager.startServer()
+            }
         }
     }
 
     val continueReadingBooks: Flow<List<Book>> = bookRepository.getContinueReadingBooks()
 
-    val collections: Flow<List<CollectionInfo>> = bookRepository.getCollections()
+    val collections: Flow<List<CollectionInfo>> = combine(
+        bookRepository.getCollections(),
+        bookRepository.getCompletedCollectionInfo(),
+        hideCompleted
+    ) { dbCollections, completedInfoList, hide ->
+        if (hide && completedInfoList.isNotEmpty()) {
+            dbCollections + completedInfoList
+        } else {
+            dbCollections
+        }
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val books: Flow<PagingData<Book>> = combine(_searchQuery, _sortOrder, hideCompleted) { query, sort, hide ->
@@ -100,8 +115,15 @@ class LibraryViewModel @Inject constructor(
     val booksInCollection: Flow<PagingData<Book>> = combine(_selectedCollection, hideCompleted) { name, hide ->
         name to hide
     }.flatMapLatest { (name, hide) ->
-        if (name != null) bookRepository.getBooksInCollectionPaged(name, hide)
-        else flowOf(PagingData.empty())
+        if (name != null) {
+            if (name == "Completed") {
+                bookRepository.getCompletedBooksPaged("")
+            } else {
+                bookRepository.getBooksInCollectionPaged(name, hide)
+            }
+        } else {
+            flowOf(PagingData.empty())
+        }
     }.cachedIn(viewModelScope)
 
     init {
@@ -133,7 +155,7 @@ class LibraryViewModel @Inject constructor(
     fun importFile(uri: Uri, onComplete: (String) -> Unit) {
         viewModelScope.launch {
             val uriString = uri.toString()
-            val existingBook = bookRepository.getBookByPath(uriString)
+            val existingBook = bookRepository.getBookByPathOrUri(uriString)
             if (existingBook != null) {
                 onComplete(existingBook.id)
             } else {
@@ -216,9 +238,15 @@ class LibraryViewModel @Inject constructor(
     fun setVolumeKeys(enabled: Boolean) = viewModelScope.launch { settingsManager.setVolumeKeys(enabled) }
     fun setAdaptiveChroma(enabled: Boolean) = viewModelScope.launch { settingsManager.setAdaptiveChroma(enabled) }
     fun setHideCompleted(enabled: Boolean) = viewModelScope.launch { settingsManager.setHideCompleted(enabled) }
+    fun setKeepScreenOn(enabled: Boolean) = viewModelScope.launch { settingsManager.setKeepScreenOn(enabled) }
+    fun setHqScaling(enabled: Boolean) = viewModelScope.launch { settingsManager.setHqScaling(enabled) }
+    fun setLongPressMenu(enabled: Boolean) = viewModelScope.launch { settingsManager.setLongPressMenu(enabled) }
 
+    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
     override fun onCleared() {
         super.onCleared()
-        lanTransferManager.stopServer()
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            lanTransferManager.stopServer()
+        }
     }
 }

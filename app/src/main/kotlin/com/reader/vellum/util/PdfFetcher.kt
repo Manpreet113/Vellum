@@ -44,38 +44,38 @@ class PdfFetcher(
         }
 
         context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
-            val renderer = PdfRenderer(pfd)
-            if (request.pageIndex >= renderer.pageCount) {
-                renderer.close()
-                throw Exception("Page index out of bounds")
-            }
+            PdfRenderer(pfd).use { renderer ->
+                if (request.pageIndex >= renderer.pageCount) {
+                    throw Exception("Page index out of bounds")
+                }
 
-            renderer.openPage(request.pageIndex).use { page ->
-                val scale = 2.0
-                val bitmap = Bitmap.createBitmap(
-                    (page.width * scale).toInt(),
-                    (page.height * scale).toInt(),
-                    Bitmap.Config.ARGB_8888
-                )
-                val canvas = android.graphics.Canvas(bitmap)
-                canvas.drawColor(android.graphics.Color.WHITE)
-                
-                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                
-                val stream = ByteArrayOutputStream()
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
-                val data = stream.toByteArray()
-                bitmap.recycle()
-                PageCache.put(request.uriString, cacheKey, data)
+                renderer.openPage(request.pageIndex).use { page ->
+                    val scale = 2.0
+                    val bitmap = Bitmap.createBitmap(
+                        (page.width * scale).toInt(),
+                        (page.height * scale).toInt(),
+                        Bitmap.Config.ARGB_8888
+                    )
+                    val canvas = android.graphics.Canvas(bitmap)
+                    canvas.drawColor(android.graphics.Color.WHITE)
+                    
+                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    
+                    val stream = ByteArrayOutputStream()
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+                    val data = stream.toByteArray()
+                    bitmap.recycle()
+                    PageCache.put(request.uriString, cacheKey, data)
 
-                return SourceFetchResult(
-                    source = ImageSource(
-                        source = Buffer().apply { write(data) },
-                        fileSystem = options.fileSystem
-                    ),
-                    mimeType = "image/jpeg",
-                    dataSource = DataSource.DISK
-                )
+                    return SourceFetchResult(
+                        source = ImageSource(
+                            source = Buffer().apply { write(data) },
+                            fileSystem = options.fileSystem
+                        ),
+                        mimeType = "image/jpeg",
+                        dataSource = DataSource.DISK
+                    )
+                }
             }
         } ?: throw Exception("Failed to open PDF file descriptor")
     }

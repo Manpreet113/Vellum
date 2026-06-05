@@ -16,9 +16,10 @@ val provider = GoogleFont.Provider(
 )
 
 val EpilogueFontFamily = FontFamily(
-    Font(googleFont = GoogleFont("Epilogue"), fontProvider = provider, weight = FontWeight.Bold),
-    Font(googleFont = GoogleFont("Epilogue"), fontProvider = provider, weight = FontWeight.ExtraBold),
-    Font(googleFont = GoogleFont("Epilogue"), fontProvider = provider, weight = FontWeight.SemiBold)
+    Font(googleFont = GoogleFont("Syne"), fontProvider = provider, weight = FontWeight.Bold),
+    Font(googleFont = GoogleFont("Syne"), fontProvider = provider, weight = FontWeight.ExtraBold),
+    Font(googleFont = GoogleFont("Syne"), fontProvider = provider, weight = FontWeight.SemiBold),
+    Font(googleFont = GoogleFont("Syne"), fontProvider = provider, weight = FontWeight.Normal)
 )
 
 val NewsreaderFontFamily = FontFamily(
@@ -30,6 +31,12 @@ val InterFontFamily = FontFamily(
     Font(googleFont = GoogleFont("Inter"), fontProvider = provider, weight = FontWeight.Normal),
     Font(googleFont = GoogleFont("Inter"), fontProvider = provider, weight = FontWeight.Medium),
     Font(googleFont = GoogleFont("Inter"), fontProvider = provider, weight = FontWeight.SemiBold)
+)
+
+val JetBrainsMonoFontFamily = FontFamily(
+    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = provider, weight = FontWeight.Normal),
+    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = provider, weight = FontWeight.Medium),
+    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = provider, weight = FontWeight.Bold)
 )
 
 val Typography = Typography(
@@ -66,14 +73,14 @@ val Typography = Typography(
         lineHeight = 24.sp
     ),
     labelLarge = TextStyle(
-        fontFamily = InterFontFamily,
+        fontFamily = JetBrainsMonoFontFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 14.sp,
-        lineHeight = 14.sp,
+        lineHeight = 20.sp,
         letterSpacing = 0.05.sp
     ),
     labelSmall = TextStyle(
-        fontFamily = InterFontFamily,
+        fontFamily = JetBrainsMonoFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
         lineHeight = 17.sp

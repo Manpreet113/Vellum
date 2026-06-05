@@ -45,8 +45,8 @@ class LanTransferManager @Inject constructor(
 
     private var server: EmbeddedServer<*, *>? = null
 
-    fun startServer() {
-        if (_isServerRunning.value) return
+    suspend fun startServer() = withContext(Dispatchers.IO) {
+        if (_isServerRunning.value) return@withContext
 
         val port = 8080
         val ip = getLocalIpAddress() ?: "127.0.0.1"
@@ -200,7 +200,8 @@ class LanTransferManager @Inject constructor(
                     val multipart = call.receiveMultipart()
                     multipart.forEachPart { part ->
 	                        if (part is PartData.FileItem) {
-	                            val fileName = part.originalFileName ?: "unknown"
+	                            val rawFileName = part.originalFileName ?: "unknown"
+	                            val fileName = rawFileName.substringAfterLast('/').substringAfterLast('\\')
 	                            val file = File(context.filesDir, fileName)
 	                            part.provider().copyTo(file.outputStream())
 
@@ -222,7 +223,7 @@ class LanTransferManager @Inject constructor(
         _isServerRunning.value = true
     }
 
-    fun stopServer() {
+    suspend fun stopServer() = withContext(Dispatchers.IO) {
         server?.stop(1000, 2000)
         server = null
         _isServerRunning.value = false

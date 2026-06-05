@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
@@ -19,8 +20,8 @@ private val NeoDarkColorScheme = darkColorScheme(
     outline = OutlineNeo,
     secondary = PrimaryNeo,
     onSecondary = OnPrimaryNeo,
-    tertiary = PrimaryNeo,
-    onTertiary = OnPrimaryNeo
+    tertiary = WarmTertiary,
+    onTertiary = Color(0xFF4F2500)
 )
 
 @Composable

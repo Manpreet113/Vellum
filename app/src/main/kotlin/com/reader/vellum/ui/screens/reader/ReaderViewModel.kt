@@ -357,11 +357,12 @@ class ReaderViewModel @Inject constructor(
         return readableIndex.takeIf { it >= 0 } ?: 0
     }
 
+    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
     override fun onCleared() {
         super.onCleared()
         prefetchJob?.cancel()
         progressUpdateJob?.cancel()
-        viewModelScope.launch(Dispatchers.IO) {
+        GlobalScope.launch(Dispatchers.IO) {
             flushPendingProgress()
         }
         PageCache.clear()

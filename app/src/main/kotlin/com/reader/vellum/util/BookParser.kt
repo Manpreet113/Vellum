@@ -21,6 +21,7 @@ class BookParser(private val context: Context) {
     fun parseDocumentFile(document: DocumentFile, collectionName: String?): Book? {
         val uri = document.uri
         val isExternal = uri.scheme == "content" && !uri.toString().contains(context.packageName)
+        val originalUriString = uri.toString()
         
         val finalDoc = if (isExternal) {
             persistExternalFile(document) ?: return null
@@ -31,9 +32,9 @@ class BookParser(private val context: Context) {
         val extension = finalDoc.name?.substringAfterLast('.', "")?.lowercase() ?: ""
         return try {
             when (extension) {
-                "cbz", "zip" -> parseCbz(finalDoc, collectionName)
-                "pdf" -> parsePdf(finalDoc, collectionName)
-                "epub" -> epubParser.parseEpub(finalDoc, collectionName)
+                "cbz", "zip" -> parseCbz(finalDoc, originalUriString, collectionName)
+                "pdf" -> parsePdf(finalDoc, originalUriString, collectionName)
+                "epub" -> epubParser.parseEpub(finalDoc, originalUriString, collectionName)
                 else -> null
             }
         } catch (e: Exception) {
@@ -59,17 +60,20 @@ class BookParser(private val context: Context) {
         }
     }
 
-    private fun parseCbz(document: DocumentFile, collectionName: String?): Book {
+    private fun parseCbz(document: DocumentFile, originalUriString: String, collectionName: String?): Book {
         var coverPath: String? = null
         var totalPages = 0
-        val uriString = document.uri.toString()
-        val coverKey = BookIdentity.filesystemKey(uriString)
+        val filePath = document.uri.toString()
+        val coverKey = BookIdentity.filesystemKey(originalUriString)
         
         context.contentResolver.openInputStream(document.uri)?.use { input ->
             ZipInputStream(input).use { zip ->
                 var entry = zip.nextEntry
                 while (entry != null) {
-                    if (!entry.isDirectory && isImage(entry.name)) {
+                    if (!entry.isDirectory && isImage(entry.name) && 
+                        !entry.name.contains("__MACOSX") && 
+                        !entry.name.substringAfterLast('/').startsWith(".")
+                    ) {
                         totalPages++
                         if (coverPath == null) {
                             val coverFile = File(coverDir, "${coverKey}_cover.jpg")
@@ -85,11 +89,11 @@ class BookParser(private val context: Context) {
         }
 
         return Book(
-            id = BookIdentity.stableBookId(uriString),
+            id = BookIdentity.stableBookId(originalUriString),
             title = document.name?.substringBeforeLast('.') ?: "Unknown",
             author = null,
-            filePath = uriString,
-            uriString = uriString,
+            filePath = filePath,
+            uriString = originalUriString,
             coverPath = coverPath,
             format = "cbz",
             totalPages = totalPages,
@@ -97,11 +101,11 @@ class BookParser(private val context: Context) {
         )
     }
 
-    private fun parsePdf(document: DocumentFile, collectionName: String?): Book {
+    private fun parsePdf(document: DocumentFile, originalUriString: String, collectionName: String?): Book {
         var coverPath: String? = null
         var totalPages = 0
-        val uriString = document.uri.toString()
-        val coverKey = BookIdentity.filesystemKey(uriString)
+        val filePath = document.uri.toString()
+        val coverKey = BookIdentity.filesystemKey(originalUriString)
 
         context.contentResolver.openFileDescriptor(document.uri, "r")?.use { pfd ->
             val renderer = PdfRenderer(pfd)
@@ -127,11 +131,11 @@ class BookParser(private val context: Context) {
         }
 
         return Book(
-            id = BookIdentity.stableBookId(uriString),
+            id = BookIdentity.stableBookId(originalUriString),
             title = document.name?.substringBeforeLast('.') ?: "Unknown",
             author = null,
-            filePath = uriString,
-            uriString = uriString,
+            filePath = filePath,
+            uriString = originalUriString,
             coverPath = coverPath,
             format = "pdf",
             totalPages = totalPages,

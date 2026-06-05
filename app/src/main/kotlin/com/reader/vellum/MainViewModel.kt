@@ -25,7 +25,7 @@ class MainViewModel @Inject constructor(
     fun handleIntentUri(uri: Uri) {
         viewModelScope.launch {
             val uriString = uri.toString()
-            val existingBook = bookRepository.getBookByPath(uriString)
+            val existingBook = bookRepository.getBookByPathOrUri(uriString)
             
             if (existingBook != null) {
                 _navigateToReader.emit(existingBook.id)

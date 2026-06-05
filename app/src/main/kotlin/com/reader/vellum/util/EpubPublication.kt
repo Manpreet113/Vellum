@@ -91,7 +91,7 @@ class EpubPublication private constructor(
     fun loadResource(archivePath: String): EpubResource? {
         val normalizedPath = normalizeHref(archivePath)
         val resource = resolveResource(normalizedPath)
-        val bytes = readArchiveBytes(normalizedPath) ?: resource?.data ?: return null
+        val bytes = resource?.data ?: readArchiveBytes(normalizedPath) ?: return null
         val mediaTypeName = resource?.mediaType?.name
         return EpubResource(
             bytes = bytes,

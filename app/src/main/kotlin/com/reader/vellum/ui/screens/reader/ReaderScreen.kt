@@ -9,13 +9,18 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +36,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -39,6 +46,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.BottomSheetDefaults
@@ -46,6 +55,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +67,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -70,11 +81,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,9 +100,11 @@ import androidx.core.view.WindowInsetsControllerCompat
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.reader.vellum.ui.components.ShimmerBox
 import com.reader.vellum.ui.components.indigoGlow
 import com.reader.vellum.ui.theme.ElectricIndigo
 import com.reader.vellum.ui.theme.InkBlack
+import com.reader.vellum.ui.theme.SurfaceElevated1
 import com.reader.vellum.util.EpubManifest
 import com.reader.vellum.util.EpubStyle
 import com.reader.vellum.util.EpubStyleGenerator
@@ -98,6 +114,21 @@ import java.io.ByteArrayInputStream
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import android.widget.Toast
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.WidthFull
+import androidx.compose.material.icons.filled.Height
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.automirrored.filled.FormatTextdirectionLToR
+import androidx.compose.material.icons.automirrored.filled.FormatTextdirectionRToL
+
 
 private data class ReaderTocEntry(
     val title: String,
@@ -117,10 +148,15 @@ fun ReaderScreen(
     val isMangaMode by viewModel.mangaMode.collectAsState(false)
     val isTapToTurn by viewModel.tapToTurn.collectAsState(true)
     val isVolumeKeys by viewModel.volumeKeys.collectAsState(false)
+    val epubStyle by viewModel.epubStyle.collectAsState()
+    val isAdaptiveChroma by viewModel.adaptiveChroma.collectAsState(true)
 
     var showUi by rememberSaveable { mutableStateOf(false) }
     var showReaderSettings by remember { mutableStateOf(false) }
     var showChapterSheet by remember { mutableStateOf(false) }
+    var isFitWidth by rememberSaveable { mutableStateOf(false) }
+    var isBookmarked by rememberSaveable { mutableStateOf(false) }
+    var showDetailsDialog by remember { mutableStateOf(false) }
     var currentPage by rememberSaveable { mutableIntStateOf(0) }
     var progressFraction by rememberSaveable { mutableFloatStateOf(0f) }
     var progressLabel by rememberSaveable { mutableStateOf("") }
@@ -145,6 +181,11 @@ fun ReaderScreen(
                 controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         }
+        DisposableEffect(Unit) {
+            onDispose {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
     }
 
     LaunchedEffect(id) {
@@ -161,26 +202,79 @@ fun ReaderScreen(
     ) {
         when (val state = uiState) {
             is ReaderUiState.Loading -> {
+                // 2f: Skeleton loading state with blurred cover if available
+                val lastBook = (uiState as? ReaderUiState.Success)?.book
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = ElectricIndigo)
+                    if (lastBook?.coverPath != null) {
+                        AsyncImage(
+                            model = lastBook.coverPath,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize().blur(32.dp),
+                            contentScale = ContentScale.Crop
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.7f))
+                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            ShimmerBox(
+                                modifier = Modifier
+                                    .size(120.dp, 180.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                            )
+                            ShimmerBox(
+                                modifier = Modifier
+                                    .width(180.dp)
+                                    .height(16.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                            )
+                            ShimmerBox(
+                                modifier = Modifier
+                                    .width(120.dp)
+                                    .height(12.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                            )
+                        }
+                    } else {
+                        CircularProgressIndicator(color = ElectricIndigo)
+                    }
                 }
             }
 
             is ReaderUiState.Error -> {
+                // 2g: Friendlier error state with on-brand icon
                 Column(
                     modifier = Modifier
                         .align(Alignment.Center)
                         .padding(32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(Icons.Default.Error, null, tint = Color.White, modifier = Modifier.size(48.dp))
-                    Spacer(Modifier.height(16.dp))
+                    Icon(
+                        Icons.AutoMirrored.Filled.MenuBook,
+                        null,
+                        tint = ElectricIndigo.copy(alpha = 0.5f),
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    Text(
+                        text = "Couldn't open this book",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         text = state.message,
-                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.45f),
                         textAlign = TextAlign.Center
                     )
-                    Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(32.dp))
                     Button(
                         onClick = onBack,
                         colors = ButtonDefaults.buttonColors(containerColor = ElectricIndigo),
@@ -192,7 +286,7 @@ fun ReaderScreen(
             }
 
             is ReaderUiState.Success -> {
-                val accentColor = state.accentColor ?: ElectricIndigo
+                val accentColor = ElectricIndigo
                 val isEpub = state.book.format == "epub"
                 val maxPage = state.pages.lastIndex.coerceAtLeast(0)
                 val tocEntries = remember(state.pages, epubManifest) {
@@ -238,7 +332,8 @@ fun ReaderScreen(
                             isTapToTurn = isTapToTurn,
                             isVolumeKeys = isVolumeKeys,
                             seekRequest = pendingSeekTarget,
-                            onSeekConsumed = { pendingSeekTarget = null }
+                            onSeekConsumed = { pendingSeekTarget = null },
+                            contentScale = if (isFitWidth) ContentScale.FillWidth else ContentScale.Fit
                         ) { pageIndex ->
                             currentPage = pageIndex
                             progressFraction = if (maxPage > 0) {
@@ -255,166 +350,632 @@ fun ReaderScreen(
                     }
                 }
 
-                Box(
+                // 2d: Right-edge strip — only visible during immersive reading (inverse of showUi)
+                AnimatedVisibility(
+                    visible = !showUi,
                     modifier = Modifier
                         .fillMaxHeight()
-                        .width(4.dp)
                         .align(Alignment.CenterEnd)
-                        .padding(vertical = 100.dp, horizontal = 1.dp)
-                        .background(Color.White.copy(alpha = 0.05f), CircleShape)
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight(progressFraction.coerceIn(0f, 1f))
-                            .background(accentColor.copy(alpha = 0.5f), CircleShape)
-                            .indigoGlow(color = accentColor, alpha = 0.2f, blurRadius = 8.dp)
-                    )
-                }
-
-                AnimatedVisibility(
-                    visible = showUi,
-                    enter = fadeIn() + slideInVertically(),
-                    exit = fadeOut() + slideOutVertically()
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 16.dp),
-                        contentAlignment = Alignment.Center
+                            .fillMaxHeight()
+                            .width(6.dp)
+                            .padding(vertical = 100.dp, horizontal = 1.dp)
+                            .background(Color.White.copy(alpha = 0.05f), CircleShape)
                     ) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(0.95f)
+                                .fillMaxWidth()
+                                .fillMaxHeight(progressFraction.coerceIn(0f, 1f))
+                                .background(accentColor.copy(alpha = 0.5f), CircleShape)
+                                .indigoGlow(color = accentColor, alpha = 0.2f, blurRadius = 8.dp)
+                        )
+                    }
+                }
+
+                // Unified overlay: Combine top and bottom overlays with a semi-transparent dark backdrop
+                AnimatedVisibility(
+                    visible = showUi,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.65f))
+                    ) {
+                        // Gesture area for tap to close
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { showUi = false }
+                        )
+
+                        // Top App Bar
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .animateEnterExit(
+                                    enter = slideInVertically { -it },
+                                    exit = slideOutVertically { -it }
+                                )
+                                .fillMaxWidth()
                                 .statusBarsPadding()
-                                .clip(RoundedCornerShape(24.dp))
-                                .background(InkBlack.copy(alpha = 0.82f))
-                                .border(0.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
-                                .indigoGlow(color = accentColor, alpha = 0.12f, borderRadius = 24.dp)
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                .padding(horizontal = 20.dp, vertical = 8.dp)
                         ) {
                             Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.fillMaxWidth()
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                IconButton(onClick = onBack) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
-                                }
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.weight(1f)
+                                IconButton(
+                                    onClick = onBack,
+                                    modifier = Modifier.size(40.dp)
                                 ) {
-                                    Text(
-                                        text = state.book.title,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        color = Color.White
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Close",
+                                        tint = Color.White
                                     )
-                                    Text(
-                                        text = progressLabel.ifBlank {
-                                            if (isEpub) {
-                                                "CHAPTER ${currentPage + 1} OF ${state.pages.size}"
-                                            } else {
-                                                "PAGE ${currentPage + 1} OF ${state.pages.size}"
+                                }
+
+                                val titleText = if (isEpub) {
+                                    progressLabel.ifBlank { state.book.title }
+                                } else {
+                                    state.book.title
+                                }
+                                Text(
+                                    text = titleText,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 18.sp
+                                    ),
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(horizontal = 16.dp)
+                                )
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (isEpub && tocEntries.isNotEmpty()) {
+                                        IconButton(
+                                            onClick = { showChapterSheet = true },
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.FormatListBulleted,
+                                                contentDescription = "Chapters",
+                                                tint = Color.White
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = { isBookmarked = !isBookmarked },
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                            contentDescription = "Bookmark",
+                                            tint = if (isBookmarked) Color(0xFFC0C1FF) else Color.White
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Bottom Controls Panel
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .animateEnterExit(
+                                    enter = slideInVertically { it },
+                                    exit = slideOutVertically { it }
+                                )
+                                .fillMaxWidth()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    enabled = false
+                                ) {} // prevent clicks propagating to gesture area
+                                .background(
+                                    color = Color(0xFF1A1C1C).copy(alpha = 0.95f),
+                                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = Color(0xFF464554),
+                                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                                )
+                                .navigationBarsPadding()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                            ) {
+                                // Scrubber Section
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                                ) {
+                                    val prevLabel = if (isEpub) {
+                                        if (currentPage > 0) "CH $currentPage" else ""
+                                    } else {
+                                        if (currentPage > 0) "PG $currentPage" else ""
+                                    }
+                                    val centerLabel = if (isEpub) {
+                                        progressLabel.ifBlank { "CHAPTER ${currentPage + 1} OF ${state.pages.size}" }
+                                    } else {
+                                        "PAGE ${currentPage + 1} OF ${state.pages.size}"
+                                    }
+                                    val nextLabel = if (isEpub) {
+                                        if (currentPage < maxPage) "CH ${currentPage + 2}" else ""
+                                    } else {
+                                        if (currentPage < maxPage) "PG ${currentPage + 2}" else ""
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = prevLabel,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFFC7C4D7)
+                                        )
+                                        Text(
+                                            text = centerLabel.uppercase(Locale.ROOT),
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = 2.sp
+                                            ),
+                                            color = Color(0xFFC0C1FF)
+                                        )
+                                        Text(
+                                            text = nextLabel,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFFC7C4D7)
+                                        )
+                                    }
+
+                                    Spacer(Modifier.height(12.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                val target = (currentPage - 1).coerceAtLeast(0)
+                                                pendingSeekTarget = target
+                                                scrubberPosition = target.toFloat()
+                                            },
+                                            enabled = currentPage > 0,
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.SkipPrevious,
+                                                contentDescription = "Previous",
+                                                tint = if (currentPage > 0) Color(0xFFC7C4D7) else Color(0xFF464554)
+                                            )
+                                        }
+
+                                        Slider(
+                                            value = if (scrubberDragging) scrubberDraft else scrubberPosition,
+                                            onValueChange = {
+                                                scrubberDragging = true
+                                                scrubberDraft = it.coerceIn(0f, maxPage.toFloat())
+                                            },
+                                            onValueChangeFinished = {
+                                                pendingSeekTarget = scrubberDraft.roundToInt().coerceIn(0, maxPage)
+                                                scrubberPosition = pendingSeekTarget?.toFloat() ?: scrubberPosition
+                                                scrubberDragging = false
+                                            },
+                                            valueRange = 0f..maxPage.toFloat().coerceAtLeast(0f),
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = Color.White,
+                                                activeTrackColor = Color(0xFFC0C1FF),
+                                                inactiveTrackColor = Color.White.copy(alpha = 0.15f)
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        )
+
+                                        IconButton(
+                                            onClick = {
+                                                val target = (currentPage + 1).coerceAtMost(maxPage)
+                                                pendingSeekTarget = target
+                                                scrubberPosition = target.toFloat()
+                                            },
+                                            enabled = currentPage < maxPage,
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.SkipNext,
+                                                contentDescription = "Next",
+                                                tint = if (currentPage < maxPage) Color(0xFFC7C4D7) else Color(0xFF464554)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                HorizontalDivider(color = Color(0xFF464554), thickness = 0.5.dp)
+
+                                // Scrollable middle options panel
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(180.dp)
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                                ) {
+                                    if (isEpub) {
+                                        // Typography Section
+                                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(3.dp)
+                                                        .height(14.dp)
+                                                        .background(Color(0xFFC0C1FF), CircleShape)
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(
+                                                    "TYPOGRAPHY",
+                                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                                    color = Color(0xFFC0C1FF)
+                                                )
                                             }
-                                        },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = accentColor.copy(alpha = 0.85f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        fontWeight = FontWeight.Bold
-                                    )
+
+                                            ControlRow("FONT SIZE") {
+                                                Slider(
+                                                    value = epubStyle.fontSize,
+                                                    onValueChange = { viewModel.setEpubFontSize(it) },
+                                                    valueRange = 12f..32f,
+                                                    colors = SliderDefaults.colors(
+                                                        thumbColor = Color.White,
+                                                        activeTrackColor = Color(0xFFC0C1FF)
+                                                    )
+                                                )
+                                            }
+
+                                            ControlRow("LINE HEIGHT") {
+                                                Slider(
+                                                    value = epubStyle.lineHeight,
+                                                    onValueChange = { viewModel.setEpubLineHeight(it) },
+                                                    valueRange = 1.0f..2.3f,
+                                                    colors = SliderDefaults.colors(
+                                                        thumbColor = Color.White,
+                                                        activeTrackColor = Color(0xFFC0C1FF)
+                                                    )
+                                                )
+                                            }
+
+                                            ControlRow("PAGE PADDING") {
+                                                Slider(
+                                                    value = epubStyle.margin.toFloat(),
+                                                    onValueChange = { viewModel.setEpubMargin(it.roundToInt()) },
+                                                    valueRange = 12f..40f,
+                                                    colors = SliderDefaults.colors(
+                                                        thumbColor = Color.White,
+                                                        activeTrackColor = Color(0xFFC0C1FF)
+                                                    )
+                                                )
+                                            }
+
+                                            Row(
+                                                Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                FontButton("Serif", "serif", epubStyle.fontFamily == "serif", Color(0xFFC0C1FF)) {
+                                                    viewModel.setEpubFontFamily("serif")
+                                                }
+                                                FontButton("Sans", "sans-serif", epubStyle.fontFamily == "sans-serif", Color(0xFFC0C1FF)) {
+                                                    viewModel.setEpubFontFamily("sans-serif")
+                                                }
+                                                FontButton("Mono", "monospace", epubStyle.fontFamily == "monospace", Color(0xFFC0C1FF)) {
+                                                    viewModel.setEpubFontFamily("monospace")
+                                                }
+                                            }
+                                        }
+
+                                        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+
+                                        // Appearance Section
+                                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(3.dp)
+                                                        .height(14.dp)
+                                                        .background(Color(0xFFC0C1FF), CircleShape)
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(
+                                                    "APPEARANCE",
+                                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                                    color = Color(0xFFC0C1FF)
+                                                )
+                                            }
+                                            Row(
+                                                Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                ThemeCircle("Dark", Color(0xFF1A1A2E), epubStyle.theme == "dark", Color(0xFFC0C1FF)) {
+                                                    viewModel.setEpubTheme("dark")
+                                                }
+                                                ThemeCircle("Sepia", Color(0xFFF4ECD8), epubStyle.theme == "sepia", Color(0xFFC0C1FF)) {
+                                                    viewModel.setEpubTheme("sepia")
+                                                }
+                                                ThemeCircle("Light", Color.White, epubStyle.theme == "light", Color(0xFFC0C1FF)) {
+                                                    viewModel.setEpubTheme("light")
+                                                }
+                                                ThemeCircle("Night", Color(0xFF000000), epubStyle.theme == "night", Color(0xFFC0C1FF)) {
+                                                    viewModel.setEpubTheme("night")
+                                                }
+                                            }
+                                        }
+
+                                        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                                    }
+
+                                    // Display / Navigation Section
+                                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(3.dp)
+                                                    .height(14.dp)
+                                                    .background(Color(0xFFC0C1FF), CircleShape)
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(
+                                                "READING DIRECTION",
+                                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                                color = Color(0xFFC0C1FF)
+                                            )
+                                        }
+
+                                        // 3 Direction Toggles
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            Box(modifier = Modifier.weight(1f)) {
+                                                DirectionToggle(
+                                                    icon = Icons.AutoMirrored.Filled.FormatTextdirectionRToL,
+                                                    label = "R to L",
+                                                    selected = isMangaMode,
+                                                    onClick = { viewModel.setMangaMode(true) }
+                                                )
+                                            }
+                                            Box(modifier = Modifier.weight(1f)) {
+                                                DirectionToggle(
+                                                    icon = Icons.AutoMirrored.Filled.FormatTextdirectionLToR,
+                                                    label = "L to R",
+                                                    selected = !isMangaMode,
+                                                    onClick = { viewModel.setMangaMode(false) }
+                                                )
+                                            }
+                                            Box(modifier = Modifier.weight(1f)) {
+                                                DirectionToggle(
+                                                    icon = Icons.Default.SwapVert,
+                                                    label = "Vertical",
+                                                    selected = false,
+                                                    onClick = {
+                                                        Toast.makeText(context, "Vertical scrolling is not supported for this format", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                )
+                                            }
+                                        }
+
+                                        // Fit Options (only if CBZ/PDF)
+                                        if (!isEpub) {
+                                            Spacer(Modifier.height(4.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.Center,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .clickable { isFitWidth = true }
+                                                        .padding(8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.WidthFull,
+                                                        contentDescription = "Fit Width",
+                                                        tint = if (isFitWidth) Color(0xFFC0C1FF) else Color(0xFFC7C4D7),
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                    Text(
+                                                        text = "FIT WIDTH",
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                        color = if (isFitWidth) Color(0xFFC0C1FF) else Color(0xFFC7C4D7)
+                                                    )
+                                                }
+                                                Spacer(Modifier.width(24.dp))
+                                                Row(
+                                                    modifier = Modifier
+                                                        .clickable { isFitWidth = false }
+                                                        .padding(8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Height,
+                                                        contentDescription = "Fit Height",
+                                                        tint = if (!isFitWidth) Color(0xFFC0C1FF) else Color(0xFFC7C4D7),
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                    Text(
+                                                        text = "FIT HEIGHT",
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                        color = if (!isFitWidth) Color(0xFFC0C1FF) else Color(0xFFC7C4D7)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+
+                                    // Other settings
+                                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(3.dp)
+                                                    .height(14.dp)
+                                                    .background(Color(0xFFC0C1FF), CircleShape)
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(
+                                                "NAVIGATION SETTINGS",
+                                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                                color = Color(0xFFC0C1FF)
+                                            )
+                                        }
+                                        if (!isEpub) {
+                                            SettingsToggleNeo("TAP TO TURN", isTapToTurn, Color(0xFFC0C1FF), viewModel::setTapToTurn)
+                                        }
+                                        SettingsToggleNeo("VOLUME KEYS", isVolumeKeys, Color(0xFFC0C1FF), viewModel::setVolumeKeys)
+                                    }
                                 }
-                                if (isEpub) {
-                                    IconButton(
-                                        onClick = { epubHistoryBackRequest += 1 },
-                                        enabled = epubCanGoBack
+
+                                HorizontalDivider(color = Color(0xFF464554), thickness = 0.5.dp)
+
+                                // Book Info Footer
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
                                     ) {
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.ArrowBack,
-                                            "Previous location",
-                                            tint = if (epubCanGoBack) Color.White else Color.White.copy(alpha = 0.35f)
-                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(width = 48.dp, height = 64.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Color.White.copy(alpha = 0.05f))
+                                                .border(1.dp, Color(0xFF464554), RoundedCornerShape(8.dp))
+                                        ) {
+                                            if (state.book.coverPath != null) {
+                                                AsyncImage(
+                                                    model = state.book.coverPath,
+                                                    contentDescription = "Cover",
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentScale = ContentScale.Crop
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(Modifier.width(12.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = state.book.title,
+                                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = Color.White,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(
+                                                text = state.book.author ?: "Unknown Author",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color(0xFFC7C4D7),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
                                     }
-                                    IconButton(
-                                        onClick = { epubHistoryForwardRequest += 1 },
-                                        enabled = epubCanGoForward
+
+                                    Spacer(Modifier.width(16.dp))
+
+                                    Button(
+                                        onClick = { showDetailsDialog = true },
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC0C1FF)),
+                                        border = BorderStroke(1.dp, Color(0xFFC0C1FF)),
+                                        shape = RoundedCornerShape(50),
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                                     ) {
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.ArrowForward,
-                                            "Next location",
-                                            tint = if (epubCanGoForward) Color.White else Color.White.copy(alpha = 0.35f)
+                                        Text(
+                                            text = "DETAILS",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
                                         )
                                     }
-                                }
-                                if (isEpub && tocEntries.isNotEmpty()) {
-                                    IconButton(onClick = { showChapterSheet = true }) {
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.FormatListBulleted,
-                                            "Chapters",
-                                            tint = Color.White
-                                        )
-                                    }
-                                }
-                                IconButton(onClick = { showReaderSettings = true }) {
-                                    Icon(Icons.Default.Tune, "Settings", tint = Color.White)
                                 }
                             }
                         }
                     }
                 }
 
-                AnimatedVisibility(
-                    visible = showUi,
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                    enter = fadeIn() + slideInVertically { it },
-                    exit = fadeOut() + slideOutVertically { it }
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.84f)
-                                .clip(RoundedCornerShape(24.dp))
-                                .background(InkBlack.copy(alpha = 0.78f))
-                                .border(0.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
-                                .indigoGlow(color = accentColor, alpha = 0.08f, borderRadius = 24.dp)
-                                .padding(horizontal = 24.dp, vertical = 8.dp)
-                        ) {
-                            Slider(
-                                value = if (scrubberDragging) scrubberDraft else scrubberPosition,
-                                onValueChange = {
-                                    scrubberDragging = true
-                                    scrubberDraft = it.coerceIn(0f, maxPage.toFloat())
-                                },
-                                onValueChangeFinished = {
-                                    pendingSeekTarget = scrubberDraft.roundToInt().coerceIn(0, maxPage)
-                                    scrubberPosition = pendingSeekTarget?.toFloat() ?: scrubberPosition
-                                    scrubberDragging = false
-                                },
-                                valueRange = 0f..maxPage.toFloat().coerceAtLeast(0f),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Color.White,
-                                    activeTrackColor = accentColor,
-                                    inactiveTrackColor = Color.White.copy(alpha = 0.2f)
-                                )
+                if (showDetailsDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showDetailsDialog = false },
+                        title = {
+                            Text(
+                                text = "Book Details",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
                             )
-                        }
-                    }
-                }
-
-                if (showReaderSettings) {
-                    ReaderControlSheet(
-                        viewModel = viewModel,
-                        accentColor = accentColor,
-                        onDismiss = { showReaderSettings = false }
+                        },
+                        text = {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(
+                                    text = "Title: ${state.book.title}",
+                                    color = Color.White.copy(alpha = 0.9f)
+                                )
+                                Text(
+                                    text = "Author: ${state.book.author ?: "Unknown"}",
+                                    color = Color.White.copy(alpha = 0.9f)
+                                )
+                                Text(
+                                    text = "Format: ${state.book.format.uppercase(Locale.ROOT)}",
+                                    color = Color.White.copy(alpha = 0.9f)
+                                )
+                                Text(
+                                    text = "File Path: ${state.book.filePath}",
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = { showDetailsDialog = false },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC0C1FF), contentColor = Color(0xFF1000A9))
+                            ) {
+                                Text("CLOSE", fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        containerColor = Color(0xFF1E2020),
+                        textContentColor = Color.White,
+                        titleContentColor = Color.White
                     )
                 }
 
@@ -436,150 +997,7 @@ fun ReaderScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ReaderControlSheet(
-    viewModel: ReaderViewModel,
-    accentColor: Color,
-    onDismiss: () -> Unit
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val isMangaMode by viewModel.mangaMode.collectAsState(false)
-    val isTapToTurn by viewModel.tapToTurn.collectAsState(true)
-    val isAdaptiveChroma by viewModel.adaptiveChroma.collectAsState(true)
-    val isVolumeKeys by viewModel.volumeKeys.collectAsState(false)
-    val uiState by viewModel.uiState.collectAsState()
-    val isEpub = (uiState as? ReaderUiState.Success)?.book?.format == "epub"
-    val epubStyle by viewModel.epubStyle.collectAsState()
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = Color(0xFF0F0F0F),
-        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.2f)) },
-        tonalElevation = 8.dp,
-        scrimColor = Color.Black.copy(alpha = 0.7f)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 48.dp),
-            verticalArrangement = Arrangement.spacedBy(28.dp)
-        ) {
-            Text(
-                "READER CONFIG",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.sp,
-                color = Color.White
-            )
-
-            if (isEpub) {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(
-                        "TYPOGRAPHY",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = accentColor,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    ControlRow("FONT SIZE") {
-                        Slider(
-                            value = epubStyle.fontSize,
-                            onValueChange = { viewModel.setEpubFontSize(it) },
-                            valueRange = 12f..32f,
-                            colors = SliderDefaults.colors(
-                                thumbColor = Color.White,
-                                activeTrackColor = accentColor
-                            )
-                        )
-                    }
-
-                    ControlRow("LINE HEIGHT") {
-                        Slider(
-                            value = epubStyle.lineHeight,
-                            onValueChange = { viewModel.setEpubLineHeight(it) },
-                            valueRange = 1.0f..2.3f,
-                            colors = SliderDefaults.colors(
-                                thumbColor = Color.White,
-                                activeTrackColor = accentColor
-                            )
-                        )
-                    }
-
-                    ControlRow("PAGE PADDING") {
-                        Slider(
-                            value = epubStyle.margin.toFloat(),
-                            onValueChange = { viewModel.setEpubMargin(it.roundToInt()) },
-                            valueRange = 12f..40f,
-                            colors = SliderDefaults.colors(
-                                thumbColor = Color.White,
-                                activeTrackColor = accentColor
-                            )
-                        )
-                    }
-
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        FontButton("SERIF", epubStyle.fontFamily == "serif", accentColor) {
-                            viewModel.setEpubFontFamily("serif")
-                        }
-                        FontButton("SANS", epubStyle.fontFamily == "sans-serif", accentColor) {
-                            viewModel.setEpubFontFamily("sans-serif")
-                        }
-                        FontButton("MONO", epubStyle.fontFamily == "monospace", accentColor) {
-                            viewModel.setEpubFontFamily("monospace")
-                        }
-                    }
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(
-                        "APPEARANCE",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = accentColor,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        ThemeCircle("DARK", Color(0xFF0A0A0A), epubStyle.theme == "dark", accentColor) {
-                            viewModel.setEpubTheme("dark")
-                        }
-                        ThemeCircle("SEP", Color(0xFFF4ECD8), epubStyle.theme == "sepia", accentColor) {
-                            viewModel.setEpubTheme("sepia")
-                        }
-                        ThemeCircle("LIT", Color.White, epubStyle.theme == "light", accentColor) {
-                            viewModel.setEpubTheme("light")
-                        }
-                        ThemeCircle("NIT", Color.Black, epubStyle.theme == "night", accentColor) {
-                            viewModel.setEpubTheme("night")
-                        }
-                    }
-                }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(
-                    "NAVIGATION",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = accentColor,
-                    fontWeight = FontWeight.Bold
-                )
-                if (!isEpub) {
-                    SettingsToggleNeo("TAP TO TURN", isTapToTurn, accentColor, viewModel::setTapToTurn)
-                }
-                SettingsToggleNeo("MANGA MODE", isMangaMode, accentColor, viewModel::setMangaMode)
-                SettingsToggleNeo("VOLUME KEYS", isVolumeKeys, accentColor, viewModel::setVolumeKeys)
-                SettingsToggleNeo("CHROMA ENGINE", isAdaptiveChroma, accentColor, viewModel::setAdaptiveChroma)
-            }
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -595,7 +1013,7 @@ private fun EpubTocSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF0F0F0F),
+        containerColor = SurfaceElevated1,  // 3c: token
         dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.2f)) },
         tonalElevation = 8.dp,
         scrimColor = Color.Black.copy(alpha = 0.7f)
@@ -613,30 +1031,45 @@ private fun EpubTocSheet(
                 fontWeight = FontWeight.Black,
                 color = Color.White
             )
-            entries.forEach { entry ->
-                val isCurrent = entry.chapterIndex == currentChapterIndex
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(
-                            if (isCurrent) accentColor.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.04f)
+            // 2k: LazyColumn for scrollable TOC (handles 50+ chapters)
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(entries) { entry ->
+                    val isCurrent = entry.chapterIndex == currentChapterIndex
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(
+                                if (isCurrent) accentColor.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.04f)
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = if (isCurrent) accentColor.copy(alpha = 0.45f) else Color.Transparent,
+                                shape = RoundedCornerShape(18.dp)
+                            )
+                            .clickable { onChapterSelected(entry.chapterIndex) }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Chapter index counter
+                        Text(
+                            text = String.format("%02d", entry.chapterIndex + 1),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isCurrent) accentColor else Color.White.copy(alpha = 0.25f),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.width(32.dp)
                         )
-                        .border(
-                            width = 1.dp,
-                            color = if (isCurrent) accentColor.copy(alpha = 0.45f) else Color.Transparent,
-                            shape = RoundedCornerShape(18.dp)
+                        Text(
+                            text = entry.title,
+                            color = if (isCurrent) Color.White else Color.White.copy(alpha = 0.82f),
+                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
-                        .clickable { onChapterSelected(entry.chapterIndex) }
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
-                ) {
-                    Text(
-                        text = entry.title,
-                        color = if (isCurrent) Color.White else Color.White.copy(alpha = 0.82f),
-                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    }
                 }
             }
         }
@@ -657,22 +1090,41 @@ fun ControlRow(label: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-fun RowScope.FontButton(label: String, selected: Boolean, accentColor: Color, onClick: () -> Unit) {
+fun RowScope.FontButton(
+    label: String,
+    fontFamily: String,
+    selected: Boolean,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    // 2i: Font button with "Aa" preview in the actual CSS font stack
     Box(
         modifier = Modifier
             .weight(1f)
-            .height(44.dp)
+            .height(56.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(if (selected) accentColor else Color.White.copy(alpha = 0.05f))
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            label,
-            fontWeight = FontWeight.Bold,
-            color = if (selected) Color.White else Color.White.copy(alpha = 0.5f),
-            fontSize = 12.sp
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                "Aa",
+                fontWeight = FontWeight.Bold,
+                fontStyle = if (fontFamily == "serif") FontStyle.Italic else FontStyle.Normal,
+                color = if (selected) Color.White else Color.White.copy(alpha = 0.5f),
+                fontSize = 16.sp
+            )
+            Text(
+                label,
+                fontWeight = FontWeight.Medium,
+                color = if (selected) Color.White.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.35f),
+                fontSize = 10.sp
+            )
+        }
     }
 }
 
@@ -684,17 +1136,23 @@ fun RowScope.ThemeCircle(
     accentColor: Color,
     onClick: () -> Unit
 ) {
+    // 2h: Larger 56dp tap target for theme circles
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
         Box(
             modifier = Modifier
-                .size(48.dp)
+                .size(56.dp)
                 .clip(CircleShape)
                 .background(color)
-                .border(2.dp, if (selected) accentColor else Color.White.copy(alpha = 0.1f), CircleShape)
+                .border(2.5.dp, if (selected) accentColor else Color.White.copy(alpha = 0.1f), CircleShape)
                 .clickable { onClick() }
         )
-        Spacer(Modifier.height(4.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f))
+        Spacer(Modifier.height(6.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) Color.White else Color.White.copy(alpha = 0.45f),
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+        )
     }
 }
 
@@ -720,6 +1178,48 @@ fun SettingsToggleNeo(
                 uncheckedThumbColor = Color.White.copy(alpha = 0.4f),
                 uncheckedTrackColor = Color.White.copy(alpha = 0.1f)
             )
+        )
+    }
+}
+
+@Composable
+fun DirectionToggle(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) Color(0xFFC0C1FF).copy(alpha = 0.1f) else Color.Transparent)
+            .border(
+                width = 1.dp,
+                color = if (selected) Color(0xFFC0C1FF) else Color(0xFF464554),
+                shape = RoundedCornerShape(8.dp)
+            )
+            .clickable { onClick() }
+            .padding(vertical = 12.dp, horizontal = 8.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = if (selected) Color(0xFFC0C1FF) else Color(0xFFC7C4D7),
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = label.uppercase(Locale.ROOT),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Medium,
+                fontSize = 11.sp,
+                letterSpacing = 0.5.sp
+            ),
+            color = if (selected) Color(0xFFC0C1FF) else Color(0xFFC7C4D7),
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -831,8 +1331,8 @@ fun EpubEngine(
                 CircularProgressIndicator(color = accentColor)
             }
         } else {
-            val documentHtml = remember(html, epubStyle, accentColor) {
-                buildStyledDocument(html.orEmpty(), epubStyle, accentColor.toArgb())
+            val documentHtml = remember(html, epubStyle, accentColor, isMangaMode) {
+                buildStyledDocument(html.orEmpty(), epubStyle, accentColor.toArgb(), isMangaMode)
             }
 
             AndroidView(
@@ -949,24 +1449,6 @@ fun EpubEngine(
                 modifier = Modifier.fillMaxSize()
             )
         }
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 12.dp)
-                .height(4.dp)
-                .fillMaxWidth(0.4f)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.05f))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(controller.overallProgress.coerceIn(0f, 1f))
-                    .fillMaxHeight()
-                    .background(accentColor)
-                    .indigoGlow(color = accentColor, alpha = 0.4f, blurRadius = 6.dp)
-            )
-        }
     }
 }
 
@@ -980,6 +1462,7 @@ fun PaginatedEngine(
     isVolumeKeys: Boolean,
     seekRequest: Int?,
     onSeekConsumed: () -> Unit,
+    contentScale: ContentScale = ContentScale.Fit,
     onPageChanged: (Int) -> Unit
 ) {
     val pagerState = rememberPagerState(initialPage = state.initialPage, pageCount = { state.pages.size })
@@ -1016,21 +1499,44 @@ fun PaginatedEngine(
         reverseLayout = isMangaMode,
         beyondViewportPageCount = 1
     ) { pageIndex ->
+        val scrollState = rememberScrollState()
+        LaunchedEffect(pageIndex) {
+            scrollState.scrollTo(0)
+        }
+
         Box(modifier = Modifier.fillMaxSize()) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(state.pages[pageIndex])
-                    .crossfade(true)
-                    .build(),
-                contentDescription = null,
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onToggleUi() },
-                contentScale = ContentScale.Fit
-            )
+                    .then(
+                        if (contentScale == ContentScale.FillWidth) {
+                            Modifier.verticalScroll(scrollState)
+                        } else {
+                            Modifier
+                        }
+                    )
+            ) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(state.pages[pageIndex])
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .then(
+                            if (contentScale == ContentScale.FillWidth) {
+                                Modifier.fillMaxWidth()
+                            } else {
+                                Modifier.fillMaxSize()
+                            }
+                        )
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onToggleUi() },
+                    contentScale = contentScale
+                )
+            }
 
             if (isTapToTurn) {
                 Row(modifier = Modifier.fillMaxSize()) {
@@ -1111,10 +1617,11 @@ private fun resolveFallbackChapterTitle(chapterPath: String, chapterIndex: Int):
     return cleaned.ifBlank { "Chapter ${chapterIndex + 1}" }
 }
 
-private fun buildStyledDocument(rawHtml: String, style: EpubStyle, accentColor: Int): String {
+private fun buildStyledDocument(rawHtml: String, style: EpubStyle, accentColor: Int, isMangaMode: Boolean): String {
     val bridgeScript = """
         <script>
             (function() {
+                const isMangaMode = $isMangaMode;
                 function rootEl() {
                     return document.scrollingElement || document.documentElement || document.body;
                 }
@@ -1212,9 +1719,9 @@ private fun buildStyledDocument(rawHtml: String, style: EpubStyle, accentColor: 
                     if (Math.abs(diffX) < 10 && Math.abs(diffY) < 10) {
                         const width = window.innerWidth;
                         if (endX < width * 0.3) {
-                            window.pageLeft();
+                            if (isMangaMode) window.pageRight(); else window.pageLeft();
                         } else if (endX > width * 0.7) {
-                            window.pageRight();
+                            if (isMangaMode) window.pageLeft(); else window.pageRight();
                         } else if (window.VellumBridge) {
                             window.VellumBridge.toggleUi();
                         }
@@ -1223,9 +1730,9 @@ private fun buildStyledDocument(rawHtml: String, style: EpubStyle, accentColor: 
 
                     if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > swipeThreshold) {
                         if (diffX > 0) {
-                            window.pageRight();
+                            if (isMangaMode) window.pageLeft(); else window.pageRight();
                         } else {
-                            window.pageLeft();
+                            if (isMangaMode) window.pageRight(); else window.pageLeft();
                         }
                     }
                 }, { passive: true });

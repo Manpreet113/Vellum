@@ -20,16 +20,16 @@ data class EpubManifest(
 )
 
 class EpubParser(private val context: Context) {
-    fun parseEpub(document: DocumentFile, collectionName: String?): Book? {
-        val uriString = document.uri.toString()
+    fun parseEpub(document: DocumentFile, originalUriString: String, collectionName: String?): Book? {
+        val filePath = document.uri.toString()
         val manifest = runCatching { getManifest(document.uri) }.getOrNull()
 
         return Book(
-            id = BookIdentity.stableBookId(uriString),
+            id = BookIdentity.stableBookId(originalUriString),
             title = manifest?.title ?: document.name?.substringBeforeLast('.') ?: "Unknown EPUB",
             author = manifest?.author,
-            filePath = uriString,
-            uriString = uriString,
+            filePath = filePath,
+            uriString = originalUriString,
             coverPath = manifest?.coverPath,
             format = "epub",
             totalPages = 0,

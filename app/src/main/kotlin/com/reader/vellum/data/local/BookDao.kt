@@ -4,10 +4,12 @@ import androidx.paging.PagingSource
 import androidx.room.*
 import com.reader.vellum.domain.model.Book
 import kotlinx.coroutines.flow.Flow
+import androidx.sqlite.db.SupportSQLiteQuery
 
 data class CollectionInfo(
     val collectionName: String?,
-    val bookCount: Int
+    val bookCount: Int,
+    val coverPaths: String? = null  // comma-separated, up to 4
 )
 
 @Dao
@@ -30,7 +32,13 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE progress > 0 AND progress < 1 ORDER BY lastRead DESC LIMIT 10")
     fun getContinueReadingBooks(): Flow<List<Book>>
 
-    @Query("SELECT collectionName, COUNT(*) as bookCount FROM books GROUP BY collectionName")
+    @Query("""
+        SELECT collectionName,
+               COUNT(*) as bookCount,
+               GROUP_CONCAT(coverPath, ',') as coverPaths
+        FROM books
+        GROUP BY collectionName
+    """)
     fun getCollectionsWithCount(): Flow<List<CollectionInfo>>
 
     @Query("SELECT * FROM books WHERE id = :id")
@@ -38,6 +46,9 @@ interface BookDao {
 
     @Query("SELECT * FROM books WHERE filePath = :filePath")
     suspend fun getBookByPath(filePath: String): Book?
+
+    @Query("SELECT * FROM books WHERE filePath = :path OR uriString = :path")
+    suspend fun getBookByPathOrUri(path: String): Book?
 
     @Query("SELECT filePath FROM books WHERE filePath IN (:filePaths)")
     suspend fun getExistingFilePaths(filePaths: List<String>): List<String>
@@ -56,6 +67,19 @@ interface BookDao {
 
     @Delete
     suspend fun deleteBook(book: Book)
+
+    @RawQuery(observedEntities = [Book::class])
+    fun searchBooksRaw(query: SupportSQLiteQuery): PagingSource<Int, Book>
+
+    @Query("""
+        SELECT 'Completed' as collectionName,
+               COUNT(*) as bookCount,
+               GROUP_CONCAT(coverPath, ',') as coverPaths
+        FROM books
+        WHERE progress >= 1.0
+        GROUP BY collectionName
+    """)
+    fun getCompletedCollectionInfo(): Flow<List<CollectionInfo>>
 
     @Query("SELECT * FROM books")
     suspend fun getAllBooks(): List<Book>

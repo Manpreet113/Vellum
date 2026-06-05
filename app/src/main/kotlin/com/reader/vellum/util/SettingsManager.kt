@@ -21,6 +21,9 @@ class SettingsManager @Inject constructor(
     private val VOLUME_KEYS = booleanPreferencesKey("volume_keys")
     private val HIDE_COMPLETED = booleanPreferencesKey("hide_completed")
     private val ADAPTIVE_CHROMA = booleanPreferencesKey("adaptive_chroma")
+    private val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
+    private val HQ_SCALING = booleanPreferencesKey("hq_scaling")
+    private val LONG_PRESS_MENU = booleanPreferencesKey("long_press_menu")
     private val EPUB_FONT_SIZE = androidx.datastore.preferences.core.floatPreferencesKey("epub_font_size")
     private val EPUB_FONT_FAMILY = androidx.datastore.preferences.core.stringPreferencesKey("epub_font_family")
     private val EPUB_LINE_HEIGHT = androidx.datastore.preferences.core.floatPreferencesKey("epub_line_height")
@@ -33,6 +36,9 @@ class SettingsManager @Inject constructor(
     val volumeKeys: Flow<Boolean> = context.dataStore.data.map { it[VOLUME_KEYS] ?: false }
     val hideCompleted: Flow<Boolean> = context.dataStore.data.map { it[HIDE_COMPLETED] ?: true }
     val adaptiveChroma: Flow<Boolean> = context.dataStore.data.map { it[ADAPTIVE_CHROMA] ?: true }
+    val keepScreenOn: Flow<Boolean> = context.dataStore.data.map { it[KEEP_SCREEN_ON] ?: true }
+    val hqScaling: Flow<Boolean> = context.dataStore.data.map { it[HQ_SCALING] ?: false }
+    val longPressMenu: Flow<Boolean> = context.dataStore.data.map { it[LONG_PRESS_MENU] ?: false }
     val epubFontSize: Flow<Float> = context.dataStore.data.map { it[EPUB_FONT_SIZE] ?: 18f }
     val epubFontFamily: Flow<String> = context.dataStore.data.map { it[EPUB_FONT_FAMILY] ?: "serif" }
     val epubLineHeight: Flow<Float> = context.dataStore.data.map { it[EPUB_LINE_HEIGHT] ?: 1.5f }
@@ -77,6 +83,18 @@ class SettingsManager @Inject constructor(
 
     suspend fun setEpubMargin(margin: Int) {
         context.dataStore.edit { it[EPUB_MARGIN] = margin }
+    }
+
+    suspend fun setKeepScreenOn(enabled: Boolean) {
+        context.dataStore.edit { it[KEEP_SCREEN_ON] = enabled }
+    }
+
+    suspend fun setHqScaling(enabled: Boolean) {
+        context.dataStore.edit { it[HQ_SCALING] = enabled }
+    }
+
+    suspend fun setLongPressMenu(enabled: Boolean) {
+        context.dataStore.edit { it[LONG_PRESS_MENU] = enabled }
     }
 
     fun getEpubLocator(bookId: String): Flow<String?> {

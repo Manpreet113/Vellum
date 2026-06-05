@@ -49,11 +49,6 @@ fun GlassmorphicSurface(
                 shape = shape
             )
     ) {
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .blur(40.dp)
-        )
         content()
     }
 }
